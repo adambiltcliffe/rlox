@@ -1,7 +1,7 @@
 use crate::{Chunk, LineNo, OpCode};
 use std::convert::TryFrom;
 
-fn disassemble_instruction(chunk: &Chunk, offset: usize, line: Option<LineNo>) -> usize {
+pub(crate) fn disassemble_instruction(chunk: &Chunk, offset: usize, line: Option<LineNo>) -> usize {
     match line {
         None => print!("    | {:04} ", offset),
         Some(l) => print!("{:5} {:04} ", l, offset),
