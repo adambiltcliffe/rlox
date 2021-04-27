@@ -71,6 +71,10 @@ impl<'a> TracingIP<'a> {
         }
     }
 
+    fn valid(&self) -> bool {
+        self.offset < self.chunk.code.len()
+    }
+
     fn read(&mut self) -> u8 {
         self.line = match self.new_lines.peek() {
             Some(&&(offs, l)) if offs == self.offset => {
@@ -107,6 +111,10 @@ impl<'a> IP<'a> {
         Self { chunk, offset }
     }
 
+    //fn valid(&self) -> bool {
+    //    self.offset < self.chunk.code.len()
+    //}
+
     fn read(&mut self) -> u8 {
         let result = self.chunk.code[self.offset];
         self.offset += 1;
@@ -131,10 +139,12 @@ impl VM {
 
     fn run(&mut self, ip: &mut IP) -> InterpretResult {
         loop {
+            let op = ip.read();
+            // The -1 on the offset here is really awkward, needs a refactor
             #[cfg(feature = "trace")]
-            dis::disassemble_instruction(ip.chunk, ip.offset, None);
+            dis::disassemble_instruction(ip.chunk, ip.offset - 1, ip.line);
 
-            match OpCode::try_from(ip.read()) {
+            match OpCode::try_from(op) {
                 Ok(instruction) => match instruction {
                     OpCode::Constant => {
                         let val = ip.read_constant();

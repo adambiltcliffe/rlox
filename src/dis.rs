@@ -1,4 +1,4 @@
-use crate::{Chunk, LineNo, OpCode};
+use crate::{Chunk, LineNo, OpCode, TracingIP};
 use std::convert::TryFrom;
 
 pub(crate) fn disassemble_instruction(chunk: &Chunk, offset: usize, line: Option<LineNo>) -> usize {
@@ -33,16 +33,13 @@ fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
 
 pub(crate) fn disassemble_chunk(chunk: &Chunk, name: &str) {
     println!("== {} ==", name);
-    let mut new_lines = chunk.lines.iter().peekable();
-    let mut offset = 0;
-    while offset < chunk.code.len() {
-        let line = match new_lines.peek() {
-            Some(&&(offs, l)) if offs == offset => {
-                new_lines.next();
-                Some(l)
-            }
-            _ => None,
-        };
-        offset = disassemble_instruction(&chunk, offset, line);
+    let mut ip = TracingIP::new(chunk, 0);
+    while ip.valid() {
+        // This is a hairy mess
+        let _instruction = ip.read();
+        let new_offset = disassemble_instruction(chunk, ip.offset - 1, ip.line);
+        while ip.offset < new_offset {
+            let _ = ip.read();
+        }
     }
 }
