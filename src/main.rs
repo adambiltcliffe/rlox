@@ -138,6 +138,8 @@ fn main() {
     chunk.write(constant_index, 122);
     chunk.write(OpCode::Return.into(), 122);
     chunk.write(OpCode::Return.into(), 123);
+    println!("disassembler output:");
     dis::disassemble_chunk(&chunk, "test chunk");
+    println!("interpreter output:");
     vm.interpret(&chunk);
 }
