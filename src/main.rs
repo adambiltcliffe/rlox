@@ -1,5 +1,7 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
+use std::iter::Peekable;
+use std::slice::Iter;
 
 mod dis;
 
@@ -54,14 +56,40 @@ struct VM {}
 struct IP<'a> {
     chunk: &'a Chunk,
     offset: usize,
+    #[cfg(feature = "trace")]
+    line: Option<LineNo>,
+    #[cfg(feature = "trace")]
+    new_lines: Peekable<Iter<'a, (usize, LineNo)>>,
 }
 
 impl<'a> IP<'a> {
+    #[cfg(not(feature = "trace"))]
     fn new(chunk: &'a Chunk, offset: usize) -> Self {
         Self { chunk, offset }
     }
 
+    #[cfg(feature = "trace")]
+    fn new(chunk: &'a Chunk, offset: usize) -> Self {
+        let new_lines = chunk.lines.iter().peekable();
+        Self {
+            chunk,
+            offset,
+            line: None,
+            new_lines,
+        }
+    }
+
     fn read(&mut self) -> u8 {
+        #[cfg(feature = "trace")]
+        {
+            self.line = match self.new_lines.peek() {
+                Some(&&(offs, l)) if offs == self.offset => {
+                    self.new_lines.next();
+                    Some(l)
+                }
+                _ => None,
+            };
+        }
         let result = self.chunk.code[self.offset];
         self.offset += 1;
         result
