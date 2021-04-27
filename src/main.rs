@@ -53,22 +53,14 @@ type InterpretResult = Result<(), VMError>;
 
 struct VM {}
 
-struct IP<'a> {
+struct TracingIP<'a> {
     chunk: &'a Chunk,
     offset: usize,
-    #[cfg(feature = "trace")]
     line: Option<LineNo>,
-    #[cfg(feature = "trace")]
     new_lines: Peekable<Iter<'a, (usize, LineNo)>>,
 }
 
-impl<'a> IP<'a> {
-    #[cfg(not(feature = "trace"))]
-    fn new(chunk: &'a Chunk, offset: usize) -> Self {
-        Self { chunk, offset }
-    }
-
-    #[cfg(feature = "trace")]
+impl<'a> TracingIP<'a> {
     fn new(chunk: &'a Chunk, offset: usize) -> Self {
         let new_lines = chunk.lines.iter().peekable();
         Self {
@@ -80,16 +72,42 @@ impl<'a> IP<'a> {
     }
 
     fn read(&mut self) -> u8 {
-        #[cfg(feature = "trace")]
-        {
-            self.line = match self.new_lines.peek() {
-                Some(&&(offs, l)) if offs == self.offset => {
-                    self.new_lines.next();
-                    Some(l)
-                }
-                _ => None,
-            };
-        }
+        self.line = match self.new_lines.peek() {
+            Some(&&(offs, l)) if offs == self.offset => {
+                self.new_lines.next();
+                Some(l)
+            }
+            _ => None,
+        };
+
+        let result = self.chunk.code[self.offset];
+        self.offset += 1;
+        result
+    }
+
+    fn read_constant(&mut self) -> Value {
+        let index = self.read();
+        self.chunk.constants[index as usize]
+    }
+}
+
+#[cfg(feature = "trace")]
+type IP<'a> = TracingIP<'a>;
+
+// A fast IP to use when we don't need up-to-date line number info
+#[cfg(not(feature = "trace"))]
+struct IP<'a> {
+    chunk: &'a Chunk,
+    offset: usize,
+}
+
+#[cfg(not(feature = "trace"))]
+impl<'a> IP<'a> {
+    fn new(chunk: &'a Chunk, offset: usize) -> Self {
+        Self { chunk, offset }
+    }
+
+    fn read(&mut self) -> u8 {
         let result = self.chunk.code[self.offset];
         self.offset += 1;
         result
