@@ -53,6 +53,7 @@ type InterpretResult = Result<(), VMError>;
 
 struct VM {}
 
+#[derive(Clone)]
 struct TracingIP<'a> {
     chunk: &'a Chunk,
     offset: usize,
@@ -148,9 +149,8 @@ impl VM {
 
     fn run(&mut self, ip: &mut IP) -> InterpretResult {
         loop {
-            // The -1 on the offset here is really awkward, needs a refactor
             #[cfg(feature = "trace")]
-            dis::disassemble_instruction(ip.chunk, ip.offset, ip.line);
+            dis::disassemble_instruction(&mut ip.clone());
 
             match OpCode::try_from(ip.read()) {
                 Ok(instruction) => match instruction {
