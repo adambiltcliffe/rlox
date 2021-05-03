@@ -35,9 +35,9 @@ pub(crate) fn disassemble_chunk(chunk: &Chunk, name: &str) {
     println!("== {} ==", name);
     let mut ip = TracingIP::new(chunk, 0);
     while ip.valid() {
-        // This is a hairy mess
+        let line_label = if ip.is_line_start { ip.line } else { None };
+        let new_offset = disassemble_instruction(chunk, ip.offset, line_label);
         let _instruction = ip.read();
-        let new_offset = disassemble_instruction(chunk, ip.offset - 1, ip.line);
         while ip.offset < new_offset {
             let _ = ip.read();
         }

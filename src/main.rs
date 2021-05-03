@@ -57,18 +57,34 @@ struct TracingIP<'a> {
     chunk: &'a Chunk,
     offset: usize,
     line: Option<LineNo>,
+    is_line_start: bool,
     new_lines: Peekable<Iter<'a, (usize, LineNo)>>,
 }
 
 impl<'a> TracingIP<'a> {
     fn new(chunk: &'a Chunk, offset: usize) -> Self {
         let new_lines = chunk.lines.iter().peekable();
-        Self {
+        let mut me = Self {
             chunk,
             offset,
             line: None,
+            is_line_start: false,
             new_lines,
-        }
+        };
+        me.advance();
+        me
+    }
+
+    fn advance(&mut self) {
+        let old_line = self.line;
+        self.line = match self.new_lines.peek() {
+            Some(&&(offs, l)) if offs == self.offset => {
+                self.new_lines.next();
+                Some(l)
+            }
+            _ => self.line,
+        };
+        self.is_line_start = self.line != old_line;
     }
 
     fn valid(&self) -> bool {
@@ -76,16 +92,9 @@ impl<'a> TracingIP<'a> {
     }
 
     fn read(&mut self) -> u8 {
-        self.line = match self.new_lines.peek() {
-            Some(&&(offs, l)) if offs == self.offset => {
-                self.new_lines.next();
-                Some(l)
-            }
-            _ => None,
-        };
-
         let result = self.chunk.code[self.offset];
         self.offset += 1;
+        self.advance();
         result
     }
 
@@ -139,12 +148,11 @@ impl VM {
 
     fn run(&mut self, ip: &mut IP) -> InterpretResult {
         loop {
-            let op = ip.read();
             // The -1 on the offset here is really awkward, needs a refactor
             #[cfg(feature = "trace")]
-            dis::disassemble_instruction(ip.chunk, ip.offset - 1, ip.line);
+            dis::disassemble_instruction(ip.chunk, ip.offset, ip.line);
 
-            match OpCode::try_from(op) {
+            match OpCode::try_from(ip.read()) {
                 Ok(instruction) => match instruction {
                     OpCode::Constant => {
                         let val = ip.read_constant();
