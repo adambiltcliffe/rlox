@@ -9,6 +9,7 @@ mod dis;
 #[repr(u8)]
 enum OpCode {
     Constant,
+    Negate,
     Return,
 }
 
@@ -43,15 +44,6 @@ impl Chunk {
         (self.constants.len() - 1) as u8
     }
 }
-
-enum VMError {
-    CompileError,
-    RuntimeError,
-}
-
-type InterpretResult = Result<(), VMError>;
-
-struct VM {}
 
 #[derive(Clone)]
 struct TracingIP<'a> {
@@ -137,9 +129,30 @@ impl<'a> IP<'a> {
     }
 }
 
+#[derive(Debug)]
+enum CompileError {}
+
+#[derive(Debug)]
+enum RuntimeError {
+    StackUnderflow,
+}
+
+#[derive(Debug)]
+enum VMError {
+    CompileError(CompileError),
+    RuntimeError(RuntimeError),
+}
+
+type ValueResult = Result<Value, VMError>;
+type InterpretResult = Result<(), VMError>;
+
+struct VM {
+    stack: Vec<Value>,
+}
+
 impl VM {
     fn new() -> Self {
-        Self {}
+        Self { stack: Vec::new() }
     }
 
     fn interpret(&mut self, chunk: &Chunk) -> InterpretResult {
@@ -147,18 +160,43 @@ impl VM {
         self.run(&mut ip)
     }
 
+    fn pop_stack(&mut self) -> ValueResult {
+        match self.stack.pop() {
+            Some(v) => Ok(v),
+            None => Err(VMError::RuntimeError(RuntimeError::StackUnderflow)),
+        }
+    }
+
     fn run(&mut self, ip: &mut IP) -> InterpretResult {
         loop {
             #[cfg(feature = "trace")]
-            dis::disassemble_instruction(&mut ip.clone());
+            {
+                print!("          ");
+                if self.stack.len() == 0 {
+                    println!("<empty>");
+                } else {
+                    for v in &self.stack {
+                        print!("[ {} ]", v);
+                    }
+                    println!("");
+                }
+                dis::disassemble_instruction(&mut ip.clone());
+            }
 
             match OpCode::try_from(ip.read()) {
                 Ok(instruction) => match instruction {
                     OpCode::Constant => {
                         let val = ip.read_constant();
-                        println!("{}", val)
+                        self.stack.push(val);
                     }
-                    OpCode::Return => return Ok(()),
+                    OpCode::Negate => {
+                        let val = self.pop_stack()?;
+                        self.stack.push(-val);
+                    }
+                    OpCode::Return => {
+                        println!("{}", self.pop_stack()?);
+                        return Ok(());
+                    }
                 },
                 Err(_) => println!("(ignoring unknown opcode)"),
             }
@@ -172,10 +210,14 @@ fn main() {
     let constant_index = chunk.add_constant(1.2);
     chunk.write(OpCode::Constant.into(), 122);
     chunk.write(constant_index, 122);
-    chunk.write(OpCode::Return.into(), 122);
+    chunk.write(OpCode::Negate.into(), 123);
     chunk.write(OpCode::Return.into(), 123);
+    chunk.write(OpCode::Return.into(), 124);
     println!("disassembler output:");
     dis::disassemble_chunk(&chunk, "test chunk");
     println!("interpreter output:");
-    vm.interpret(&chunk);
+    match vm.interpret(&chunk) {
+        Ok(_) => println!("execution terminated successfully"),
+        Err(e) => println!("execution terminated with error: {:?}", e),
+    }
 }
