@@ -10,6 +10,10 @@ mod dis;
 enum OpCode {
     Constant,
     Negate,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
     Return,
 }
 
@@ -193,6 +197,27 @@ impl VM {
                         let val = self.pop_stack()?;
                         self.stack.push(-val);
                     }
+                    // These four are crying out to be implemented as a macro
+                    OpCode::Add => {
+                        let b = self.pop_stack()?;
+                        let a = self.pop_stack()?;
+                        self.stack.push(a + b);
+                    }
+                    OpCode::Subtract => {
+                        let b = self.pop_stack()?;
+                        let a = self.pop_stack()?;
+                        self.stack.push(a - b);
+                    }
+                    OpCode::Multiply => {
+                        let b = self.pop_stack()?;
+                        let a = self.pop_stack()?;
+                        self.stack.push(a * b);
+                    }
+                    OpCode::Divide => {
+                        let b = self.pop_stack()?;
+                        let a = self.pop_stack()?;
+                        self.stack.push(a / b);
+                    }
                     OpCode::Return => {
                         println!("{}", self.pop_stack()?);
                         return Ok(());
@@ -207,12 +232,26 @@ impl VM {
 fn main() {
     let mut vm = VM::new();
     let mut chunk = Chunk::new();
+
     let constant_index = chunk.add_constant(1.2);
     chunk.write(OpCode::Constant.into(), 122);
     chunk.write(constant_index, 122);
+
+    let constant_index = chunk.add_constant(3.4);
+    chunk.write(OpCode::Constant.into(), 123);
+    chunk.write(constant_index, 123);
+
+    chunk.write(OpCode::Add.into(), 124);
+
+    let constant_index = chunk.add_constant(5.6);
+    chunk.write(OpCode::Constant.into(), 125);
+    chunk.write(constant_index, 125);
+
+    chunk.write(OpCode::Divide.into(), 123);
     chunk.write(OpCode::Negate.into(), 123);
     chunk.write(OpCode::Return.into(), 123);
     chunk.write(OpCode::Return.into(), 124);
+
     println!("disassembler output:");
     dis::disassemble_chunk(&chunk, "test chunk");
     println!("interpreter output:");
