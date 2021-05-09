@@ -172,6 +172,14 @@ impl VM {
     }
 
     fn run(&mut self, ip: &mut IP) -> InterpretResult {
+        macro_rules! binary_op {
+            ($op:tt) => {{
+                let b = self.pop_stack()?;
+                let a = self.pop_stack()?;
+                self.stack.push(a $op b);
+         } };
+        }
+
         loop {
             #[cfg(feature = "trace")]
             {
@@ -197,27 +205,10 @@ impl VM {
                         let val = self.pop_stack()?;
                         self.stack.push(-val);
                     }
-                    // These four are crying out to be implemented as a macro
-                    OpCode::Add => {
-                        let b = self.pop_stack()?;
-                        let a = self.pop_stack()?;
-                        self.stack.push(a + b);
-                    }
-                    OpCode::Subtract => {
-                        let b = self.pop_stack()?;
-                        let a = self.pop_stack()?;
-                        self.stack.push(a - b);
-                    }
-                    OpCode::Multiply => {
-                        let b = self.pop_stack()?;
-                        let a = self.pop_stack()?;
-                        self.stack.push(a * b);
-                    }
-                    OpCode::Divide => {
-                        let b = self.pop_stack()?;
-                        let a = self.pop_stack()?;
-                        self.stack.push(a / b);
-                    }
+                    OpCode::Add => binary_op!(+),
+                    OpCode::Subtract => binary_op!(-),
+                    OpCode::Multiply => binary_op!(*),
+                    OpCode::Divide => binary_op!(/),
                     OpCode::Return => {
                         println!("{}", self.pop_stack()?);
                         return Ok(());
