@@ -45,7 +45,6 @@ impl<'a> Token<'a> {
 
 struct Scanner<'a> {
     source: &'a str,
-    source_offset: usize,
     token_start: usize,
     chars: Peekable<CharIndices<'a>>,
     line: usize,
@@ -56,7 +55,6 @@ impl<'a> Scanner<'a> {
         let mut chars = source.char_indices().peekable();
         Self {
             source,
-            source_offset: 0,
             token_start: chars.peek().map(|(index, _c)| *index).unwrap_or(0),
             chars,
             line: 1,
@@ -89,13 +87,14 @@ impl<'a> Scanner<'a> {
             None => return false,
             Some((index, _c)) => *index,
         };
-        let end_offset = byte + strlen + self.source_offset;
+        let end_offset = byte + strlen;
         if end_offset > self.source.len() {
             return false;
         }
-        if expected == &self.source[byte + self.source_offset..end_offset] {
-            self.chars = self.source[end_offset..].char_indices().peekable();
-            self.source_offset = end_offset;
+        if expected == &self.source[byte..end_offset] {
+            for _ in 0..expected.chars().count() {
+                self.chars.next();
+            }
             return true;
         }
         false
@@ -105,11 +104,12 @@ impl<'a> Scanner<'a> {
         self.chars
             .peek()
             .map(|(index, _c)| *index)
-            .unwrap_or(self.source.len() - self.source_offset)
+            .unwrap_or(self.source.len())
     }
 
     fn skip_whitespace(&mut self) {
         loop {
+            //println!("{:?}", self.chars.peek());
             match self.chars.peek() {
                 Some((_, ' ')) | Some((_, '\r')) | Some((_, '\t')) => {
                     self.advance();
@@ -137,8 +137,7 @@ impl<'a> Scanner<'a> {
 
     fn make_token(&mut self, ttype: TokenType) -> Token<'a> {
         let current = self.current();
-        let span =
-            Some(&self.source[self.token_start + self.source_offset..current + self.source_offset]);
+        let span = Some(&self.source[self.token_start..current]);
         Token::new(ttype, span, self.line)
     }
 
@@ -199,8 +198,8 @@ pub fn compile(source: &str) {
     loop {
         let token = scanner.scan_token();
         if token.line != line {
-            print!("{:>4} ", line);
             line = token.line;
+            print!("{:>4} ", line);
         } else {
             print!("   | ");
         }
