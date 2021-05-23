@@ -1,8 +1,10 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
+use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
 
+mod compiler;
 mod dis;
 
 #[derive(IntoPrimitive, TryFromPrimitive)]
@@ -159,9 +161,14 @@ impl VM {
         Self { stack: Vec::new() }
     }
 
-    fn interpret(&mut self, chunk: &Chunk) -> InterpretResult {
+    /*fn interpret(&mut self, chunk: &Chunk) -> InterpretResult {
         let mut ip = IP::new(chunk, 0);
         self.run(&mut ip)
+    }*/
+
+    fn interpret_source(&mut self, source: &str) -> InterpretResult {
+        compiler::compile(source);
+        Ok(())
     }
 
     fn pop_stack(&mut self) -> ValueResult {
@@ -222,7 +229,8 @@ impl VM {
 
 fn main() {
     let mut vm = VM::new();
-    let mut chunk = Chunk::new();
+
+    /*let mut chunk = Chunk::new();
 
     let constant_index = chunk.add_constant(1.2);
     chunk.write(OpCode::Constant.into(), 122);
@@ -249,5 +257,39 @@ fn main() {
     match vm.interpret(&chunk) {
         Ok(_) => println!("execution terminated successfully"),
         Err(e) => println!("execution terminated with error: {:?}", e),
+    }*/
+
+    let args: Vec<String> = std::env::args().collect();
+    let argc = args.len();
+    if argc == 1 {
+        repl(&mut vm);
+    } else if argc == 2 {
+        run_file(&mut vm, &args[1])
+    } else {
+        eprintln!("usage: rlox [path]");
+        std::process::exit(64);
     }
+}
+
+fn repl(vm: &mut VM) {
+    print!("> ");
+    std::io::stdout().flush();
+    for line in std::io::stdin().lock().lines() {
+        vm.interpret_source(&line.unwrap());
+        print!("> ");
+        std::io::stdout().flush();
+    }
+}
+
+fn run_file(vm: &mut VM, path: &str) -> ! {
+    let source = std::fs::read_to_string(path).unwrap_or_else(|_| {
+        eprintln!("Could not read input file: {}", path);
+        std::process::exit(74)
+    });
+    let exitcode = match vm.interpret_source(&source) {
+        Ok(()) => 0,
+        Err(VMError::CompileError(_)) => 65,
+        Err(VMError::RuntimeError(_)) => 70,
+    };
+    std::process::exit(exitcode);
 }
