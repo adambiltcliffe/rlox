@@ -22,8 +22,11 @@ enum TokenType {
     LessEqual,
     Greater,
     GreaterEqual,
+    NumberLiteral,
+    StringLiteral,
     EOF,
     UnexpectedCharacterError,
+    UnterminatedStringError,
 }
 
 #[derive(Debug)]
@@ -41,6 +44,13 @@ impl<'a> Token<'a> {
             line,
         }
     }
+}
+
+fn is_digit(c: Option<char>) -> bool {
+    if let Some(c) = c {
+        return c >= '0' && c <= '9';
+    }
+    false
 }
 
 struct Scanner<'a> {
@@ -109,7 +119,6 @@ impl<'a> Scanner<'a> {
 
     fn skip_whitespace(&mut self) {
         loop {
-            //println!("{:?}", self.chars.peek());
             match self.chars.peek() {
                 Some((_, ' ')) | Some((_, '\r')) | Some((_, '\t')) => {
                     self.advance();
@@ -141,10 +150,55 @@ impl<'a> Scanner<'a> {
         Token::new(ttype, span, self.line)
     }
 
+    fn string_literal(&mut self) -> Token<'a> {
+        loop {
+            match self.chars.peek() {
+                Some((_, '"')) => {
+                    self.advance();
+                    return self.make_token(TokenType::StringLiteral);
+                }
+                Some((_, c)) => {
+                    if *c == '\n' {
+                        self.line += 1;
+                    }
+                    self.advance();
+                }
+                None => return self.make_token(TokenType::UnterminatedStringError),
+            }
+        }
+    }
+
+    fn consume_integers(&mut self) {
+        while match self.chars.peek() {
+            Some((_, c)) => is_digit(Some(*c)),
+            None => false,
+        } {
+            self.advance();
+        }
+    }
+
+    fn number_literal(&mut self) -> Token<'a> {
+        self.consume_integers();
+        let mut ch = self.chars.clone();
+        if let Some((_, '.')) = ch.next() {
+            if let Some((_, c)) = ch.next() {
+                if is_digit(Some(c)) {
+                    self.advance();
+                    self.consume_integers();
+                }
+            }
+        }
+        self.make_token(TokenType::NumberLiteral)
+    }
+
     pub fn scan_token(&mut self) -> Token<'a> {
         self.skip_whitespace();
         self.token_start = self.current();
-        match self.advance() {
+        let c = self.advance();
+        if is_digit(c) {
+            return self.number_literal();
+        }
+        match c {
             None => Token::new(TokenType::EOF, None, self.line),
             Some(c) => match c {
                 '(' => self.make_token(TokenType::LeftParen),
@@ -186,6 +240,7 @@ impl<'a> Scanner<'a> {
                         self.make_token(TokenType::Greater)
                     }
                 }
+                '"' => self.string_literal(),
                 _ => self.make_token(TokenType::UnexpectedCharacterError),
             },
         }
