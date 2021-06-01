@@ -1,3 +1,4 @@
+use crate::{Chunk, CompilerResult};
 use std::iter::Peekable;
 use std::str::CharIndices;
 
@@ -338,7 +339,7 @@ impl<'a> Scanner<'a> {
     }
 }
 
-pub fn compile(source: &str) {
+pub(crate) fn compile(source: &str) -> CompilerResult {
     let mut line: usize = 0;
     let mut scanner = Scanner::new(source);
     loop {
@@ -351,7 +352,8 @@ pub fn compile(source: &str) {
         }
         println!("{:?}", token);
         if let TokenType::EOF = token.ttype {
-            break ();
+            break;
         }
     }
+    Ok(Chunk::new())
 }

@@ -22,7 +22,7 @@ enum OpCode {
 type Value = f64;
 type LineNo = u32;
 
-struct Chunk {
+pub(crate) struct Chunk {
     code: Vec<u8>,
     constants: Vec<Value>,
     lines: Vec<(usize, LineNo)>,
@@ -119,9 +119,9 @@ impl<'a> IP<'a> {
         Self { chunk, offset }
     }
 
-    //fn valid(&self) -> bool {
-    //    self.offset < self.chunk.code.len()
-    //}
+    fn valid(&self) -> bool {
+        self.offset < self.chunk.code.len()
+    }
 
     fn read(&mut self) -> u8 {
         let result = self.chunk.code[self.offset];
@@ -140,6 +140,7 @@ enum CompileError {}
 
 #[derive(Debug)]
 enum RuntimeError {
+    EndOfChunk,
     StackUnderflow,
 }
 
@@ -149,6 +150,7 @@ enum VMError {
     RuntimeError(RuntimeError),
 }
 
+type CompilerResult = Result<Chunk, CompileError>;
 type ValueResult = Result<Value, VMError>;
 type InterpretResult = Result<(), VMError>;
 
@@ -161,14 +163,14 @@ impl VM {
         Self { stack: Vec::new() }
     }
 
-    /*fn interpret(&mut self, chunk: &Chunk) -> InterpretResult {
-        let mut ip = IP::new(chunk, 0);
-        self.run(&mut ip)
-    }*/
-
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
-        compiler::compile(source);
-        Ok(())
+        match compiler::compile(source) {
+            Ok(chunk) => {
+                let mut ip = IP::new(&chunk, 0);
+                self.run(&mut ip)
+            }
+            Err(e) => Err(VMError::CompileError(e)),
+        }
     }
 
     fn pop_stack(&mut self) -> ValueResult {
@@ -188,6 +190,11 @@ impl VM {
         }
 
         loop {
+            // Performance-wise, we may want to delete this eventually
+            if !ip.valid() {
+                return Err(VMError::RuntimeError(RuntimeError::EndOfChunk));
+            }
+
             #[cfg(feature = "trace")]
             {
                 print!("          ");
@@ -275,7 +282,7 @@ fn repl(vm: &mut VM) {
     print!("> ");
     std::io::stdout().flush();
     for line in std::io::stdin().lock().lines() {
-        vm.interpret_source(&line.unwrap());
+        println!("Result: {:?}", vm.interpret_source(&line.unwrap()));
         print!("> ");
         std::io::stdout().flush();
     }
