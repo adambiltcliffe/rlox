@@ -24,6 +24,23 @@ enum TokenType {
     GreaterEqual,
     NumberLiteral,
     StringLiteral,
+    Identifier,
+    And,
+    Class,
+    Else,
+    False,
+    For,
+    Fun,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
     EOF,
     UnexpectedCharacterError,
     UnterminatedStringError,
@@ -51,6 +68,21 @@ fn is_digit(c: Option<char>) -> bool {
         return c >= '0' && c <= '9';
     }
     false
+}
+
+fn is_ident(c: Option<char>) -> bool {
+    if let Some(c) = c {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+    }
+    false
+}
+
+fn check_keyword(word: &str, kw: &str, pos: usize, tt: TokenType) -> TokenType {
+    if word[pos..] == kw[pos..] {
+        tt
+    } else {
+        TokenType::Identifier
+    }
 }
 
 struct Scanner<'a> {
@@ -144,10 +176,13 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn make_token(&mut self, ttype: TokenType) -> Token<'a> {
+    fn content(&mut self) -> &'a str {
         let current = self.current();
-        let span = Some(&self.source[self.token_start..current]);
-        Token::new(ttype, span, self.line)
+        &self.source[self.token_start..current]
+    }
+
+    fn make_token(&mut self, ttype: TokenType) -> Token<'a> {
+        Token::new(ttype, Some(self.content()), self.line)
     }
 
     fn string_literal(&mut self) -> Token<'a> {
@@ -191,10 +226,66 @@ impl<'a> Scanner<'a> {
         self.make_token(TokenType::NumberLiteral)
     }
 
+    fn identifier(&mut self) -> Token<'a> {
+        while match self.chars.peek() {
+            Some((_, c)) => is_digit(Some(*c)) || is_ident(Some(*c)),
+            None => false,
+        } {
+            self.advance();
+        }
+        let t = self.identifier_type();
+        self.make_token(t)
+    }
+
+    fn identifier_type(&mut self) -> TokenType {
+        let word = self.content();
+        if word.len() < 1 {
+            return TokenType::Identifier;
+        }
+        match &word[..1] {
+            "a" => check_keyword(word, "and", 1, TokenType::And),
+            "c" => check_keyword(word, "class", 1, TokenType::Class),
+            "e" => check_keyword(word, "else", 1, TokenType::Else),
+            "f" => {
+                if word.len() < 2 {
+                    return TokenType::Identifier;
+                }
+                match &word[1..2] {
+                    "a" => check_keyword(word, "false", 2, TokenType::False),
+                    "o" => check_keyword(word, "for", 2, TokenType::For),
+                    "u" => check_keyword(word, "fun", 2, TokenType::Fun),
+                    _ => TokenType::Identifier,
+                }
+            }
+            "i" => check_keyword(word, "if", 1, TokenType::If),
+            "n" => check_keyword(word, "nil", 1, TokenType::Nil),
+            "o" => check_keyword(word, "or", 1, TokenType::Or),
+            "p" => check_keyword(word, "print", 1, TokenType::Print),
+            "r" => check_keyword(word, "return", 1, TokenType::Return),
+            "s" => check_keyword(word, "super", 1, TokenType::Super),
+            "t" => {
+                if word.len() < 2 {
+                    return TokenType::Identifier;
+                }
+                match &word[1..2] {
+                    "h" => check_keyword(word, "this", 2, TokenType::This),
+                    "r" => check_keyword(word, "true", 2, TokenType::True),
+                    _ => TokenType::Identifier,
+                }
+            }
+            "v" => check_keyword(word, "var", 1, TokenType::Var),
+            "w" => check_keyword(word, "while", 1, TokenType::While),
+            _ => TokenType::Identifier,
+        }
+    }
+
     pub fn scan_token(&mut self) -> Token<'a> {
         self.skip_whitespace();
         self.token_start = self.current();
         let c = self.advance();
+        if is_ident(c) {
+            return self.identifier();
+        }
         if is_digit(c) {
             return self.number_literal();
         }
