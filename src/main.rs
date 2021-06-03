@@ -46,9 +46,12 @@ impl Chunk {
         }
     }
 
-    fn add_constant(&mut self, value: Value) -> u8 {
+    fn add_constant(&mut self, value: Value) -> Option<u8> {
+        if self.constants.len() > (u8::MAX as usize) {
+            return None;
+        }
         self.constants.push(value);
-        (self.constants.len() - 1) as u8
+        Some((self.constants.len() - 1) as u8)
     }
 }
 
@@ -139,6 +142,7 @@ impl<'a> IP<'a> {
 #[derive(Debug, Clone, Copy)]
 pub enum CompileError {
     ParseError,
+    TooManyConstants,
 }
 
 #[derive(Debug, Clone, Copy)]
