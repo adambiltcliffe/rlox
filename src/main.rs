@@ -136,16 +136,18 @@ impl<'a> IP<'a> {
     }
 }
 
-#[derive(Debug)]
-pub enum CompileError {}
+#[derive(Debug, Clone, Copy)]
+pub enum CompileError {
+    ParseError,
+}
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum RuntimeError {
     EndOfChunk,
     StackUnderflow,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum VMError {
     CompileError(CompileError),
     RuntimeError(RuntimeError),

@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::str::CharIndices;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TokenType {
     LeftParen,
     RightParen,
@@ -46,7 +46,17 @@ pub enum TokenType {
     UnterminatedStringError,
 }
 
-#[derive(Debug)]
+impl TokenType {
+    pub fn error_message(t: TokenType) -> Option<&'static str> {
+        match t {
+            Self::UnexpectedCharacterError => Some("unexpected character"),
+            Self::UnterminatedStringError => Some("unterminated string"),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Token<'a> {
     pub ttype: TokenType,
     pub content: Option<&'a str>,
