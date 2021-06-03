@@ -1,3 +1,4 @@
+use crate::LineNo;
 use std::iter::Peekable;
 use std::str::CharIndices;
 
@@ -60,11 +61,11 @@ impl TokenType {
 pub struct Token<'a> {
     pub ttype: TokenType,
     pub content: Option<&'a str>,
-    pub line: usize,
+    pub line: LineNo,
 }
 
 impl<'a> Token<'a> {
-    pub fn new(ttype: TokenType, content: Option<&'a str>, line: usize) -> Self {
+    pub fn new(ttype: TokenType, content: Option<&'a str>, line: LineNo) -> Self {
         Self {
             ttype,
             content,
@@ -99,7 +100,7 @@ pub struct Scanner<'a> {
     source: &'a str,
     token_start: usize,
     chars: Peekable<CharIndices<'a>>,
-    line: usize,
+    line: LineNo,
 }
 
 impl<'a> Scanner<'a> {
