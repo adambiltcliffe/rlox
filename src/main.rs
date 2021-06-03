@@ -6,6 +6,7 @@ use std::slice::Iter;
 
 mod compiler;
 mod dis;
+mod scanner;
 
 #[derive(IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
@@ -22,7 +23,7 @@ enum OpCode {
 type Value = f64;
 type LineNo = u32;
 
-pub(crate) struct Chunk {
+pub struct Chunk {
     code: Vec<u8>,
     constants: Vec<Value>,
     lines: Vec<(usize, LineNo)>,
@@ -136,16 +137,16 @@ impl<'a> IP<'a> {
 }
 
 #[derive(Debug)]
-enum CompileError {}
+pub enum CompileError {}
 
 #[derive(Debug)]
-enum RuntimeError {
+pub enum RuntimeError {
     EndOfChunk,
     StackUnderflow,
 }
 
 #[derive(Debug)]
-enum VMError {
+pub enum VMError {
     CompileError(CompileError),
     RuntimeError(RuntimeError),
 }
