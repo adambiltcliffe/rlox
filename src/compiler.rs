@@ -1,5 +1,42 @@
 use crate::scanner::{Scanner, Token, TokenType};
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode, Value};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::convert::TryFrom;
+
+#[derive(PartialOrd, PartialEq, Ord, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(usize)]
+enum Precedence {
+    None = 0,
+    Assignment = 1,
+    Or = 2,
+    And = 3,
+    Equality = 4,
+    Comparison = 5,
+    Term = 6,
+    Factor = 7,
+    Unary = 8,
+    Call = 9,
+    Primary = 10,
+}
+/*
+type ParseFn = fn(&mut Compiler);
+
+struct ParseRule {
+    prefix: Option<ParseFn>,
+    infix: Option<ParseFn>,
+    precedence: Precedence,
+}
+
+impl Default for ParseRule {
+    fn default() -> Self {
+        Self {
+            prefix: None,
+            infix: None,
+            precedence: Precedence::None,
+        }
+    }
+}
+*/
 
 fn report_error(message: &str, token: &Token) {
     eprint!("[line {}] Error", token.line);
@@ -55,6 +92,50 @@ impl<'a> Compiler<'a> {
         self.error_at_current(message, CompileError::ParseError)
     }
 
+    fn token_prefix(&mut self, ttype: TokenType) -> Result<(), ()> {
+        match ttype {
+            TokenType::LeftParen => Ok(self.grouping()),
+            TokenType::Minus => Ok(self.unary()),
+            TokenType::NumberLiteral => Ok(self.number()),
+            _ => Err(()),
+        }
+    }
+
+    fn token_infix(&mut self, ttype: TokenType) {
+        match ttype {
+            TokenType::Minus => self.binary(),
+            TokenType::Plus => self.binary(),
+            TokenType::Star => self.binary(),
+            TokenType::Slash => self.binary(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn token_precedence(&mut self, ttype: TokenType) -> Precedence {
+        match ttype {
+            TokenType::Minus => Precedence::Term,
+            TokenType::Plus => Precedence::Term,
+            TokenType::Star => Precedence::Factor,
+            TokenType::Slash => Precedence::Factor,
+            _ => Precedence::None,
+        }
+    }
+
+    fn parse_precedence(&mut self, prec: Precedence) {
+        self.advance();
+        match self.token_prefix(self.previous.as_ref().unwrap().ttype) {
+            Ok(()) => (),
+            Err(()) => {
+                self.error("Expect expression.", CompileError::ParseError);
+                return;
+            }
+        }
+        while prec <= self.token_precedence(self.current.as_ref().unwrap().ttype) {
+            self.advance();
+            self.token_infix(self.previous.as_ref().unwrap().ttype);
+        }
+    }
+
     fn number(&mut self) {
         let value: Value = self
             .previous
@@ -76,14 +157,29 @@ impl<'a> Compiler<'a> {
         let token = self.previous.as_ref().unwrap();
         let op_type = token.ttype;
         let line = token.line;
-        self.expression();
+        self.parse_precedence(Precedence::Unary);
         match op_type {
             TokenType::Minus => self.emit_byte_with_line(OpCode::Negate.into(), line),
             _ => unreachable!(),
         }
     }
 
-    fn expression(&mut self) {}
+    fn binary(&mut self) {
+        let ttype = self.previous.as_ref().unwrap().ttype;
+        let precedence: usize = self.token_precedence(ttype).into();
+        self.parse_precedence(Precedence::try_from(precedence + 1).unwrap());
+        match ttype {
+            TokenType::Plus => self.emit_byte(OpCode::Add.into()),
+            TokenType::Minus => self.emit_byte(OpCode::Subtract.into()),
+            TokenType::Star => self.emit_byte(OpCode::Multiply.into()),
+            TokenType::Slash => self.emit_byte(OpCode::Divide.into()),
+            _ => unreachable!(),
+        }
+    }
+
+    fn expression(&mut self) {
+        self.parse_precedence(Precedence::Assignment)
+    }
 
     fn error_at_current(&mut self, message: &str, ce: CompileError) {
         if self.panic_mode {
@@ -109,7 +205,7 @@ impl<'a> Compiler<'a> {
 
     fn emit_byte(&mut self, byte: u8) {
         let line = self.previous.as_ref().unwrap().line;
-        self.get_current_chunk().write(byte, line)
+        self.get_current_chunk().write(byte, line);
     }
 
     fn emit_bytes(&mut self, byte1: u8, byte2: u8) {
@@ -133,7 +229,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn end(&mut self) {
-        self.emit_byte(OpCode::Return.into())
+        self.emit_byte(OpCode::Return.into());
     }
 }
 
@@ -146,6 +242,6 @@ pub fn compile(source: &str) -> CompilerResult {
     compiler.end();
     match compiler.first_error {
         Some(e) => Err(e),
-        None => Ok(Chunk::new()),
+        None => Ok(compiler.chunk),
     }
 }
