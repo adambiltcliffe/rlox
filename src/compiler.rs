@@ -18,25 +18,6 @@ enum Precedence {
     Call = 9,
     Primary = 10,
 }
-/*
-type ParseFn = fn(&mut Compiler);
-
-struct ParseRule {
-    prefix: Option<ParseFn>,
-    infix: Option<ParseFn>,
-    precedence: Precedence,
-}
-
-impl Default for ParseRule {
-    fn default() -> Self {
-        Self {
-            prefix: None,
-            infix: None,
-            precedence: Precedence::None,
-        }
-    }
-}
-*/
 
 fn report_error(message: &str, token: &Token) {
     eprint!("[line {}] Error", token.line);
@@ -230,6 +211,12 @@ impl<'a> Compiler<'a> {
 
     fn end(&mut self) {
         self.emit_byte(OpCode::Return.into());
+        #[cfg(feature = "dump")]
+        {
+            if let None = self.first_error {
+                crate::dis::disassemble_chunk(&self.chunk, "code")
+            }
+        }
     }
 }
 

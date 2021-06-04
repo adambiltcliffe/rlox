@@ -196,6 +196,11 @@ impl VM {
          } };
         }
 
+        #[cfg(feature = "trace")]
+        {
+            println!("Execution trace:")
+        }
+
         loop {
             // Performance-wise, we may want to delete this eventually
             if !ip.valid() {
@@ -243,36 +248,6 @@ impl VM {
 
 fn main() {
     let mut vm = VM::new();
-
-    /*let mut chunk = Chunk::new();
-
-    let constant_index = chunk.add_constant(1.2);
-    chunk.write(OpCode::Constant.into(), 122);
-    chunk.write(constant_index, 122);
-
-    let constant_index = chunk.add_constant(3.4);
-    chunk.write(OpCode::Constant.into(), 123);
-    chunk.write(constant_index, 123);
-
-    chunk.write(OpCode::Add.into(), 124);
-
-    let constant_index = chunk.add_constant(5.6);
-    chunk.write(OpCode::Constant.into(), 125);
-    chunk.write(constant_index, 125);
-
-    chunk.write(OpCode::Divide.into(), 123);
-    chunk.write(OpCode::Negate.into(), 123);
-    chunk.write(OpCode::Return.into(), 123);
-    chunk.write(OpCode::Return.into(), 124);
-
-    println!("disassembler output:");
-    dis::disassemble_chunk(&chunk, "test chunk");
-    println!("interpreter output:");
-    match vm.interpret(&chunk) {
-        Ok(_) => println!("execution terminated successfully"),
-        Err(e) => println!("execution terminated with error: {:?}", e),
-    }*/
-
     let args: Vec<String> = std::env::args().collect();
     let argc = args.len();
     if argc == 1 {
@@ -287,11 +262,18 @@ fn main() {
 
 fn repl(vm: &mut VM) {
     print!("> ");
-    std::io::stdout().flush();
+    if let Err(_) = std::io::stdout().flush() {
+        eprintln!("I/O error: unable to flush stdout.");
+        return;
+    }
     for line in std::io::stdin().lock().lines() {
-        println!("Result: {:?}", vm.interpret_source(&line.unwrap()));
+        // We have already printed output in the case of an error, so squelch it
+        vm.interpret_source(&line.unwrap()).unwrap_or(());
         print!("> ");
-        std::io::stdout().flush();
+        if let Err(_) = std::io::stdout().flush() {
+            eprintln!("I/O error: unable to flush stdout.");
+            return;
+        }
     }
 }
 
