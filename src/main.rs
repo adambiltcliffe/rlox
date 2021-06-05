@@ -6,6 +6,7 @@ use std::slice::Iter;
 
 mod compiler;
 mod dis;
+mod parser;
 mod scanner;
 
 #[derive(IntoPrimitive, TryFromPrimitive)]
