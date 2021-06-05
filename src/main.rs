@@ -65,6 +65,7 @@ struct TracingIP<'a> {
     new_lines: Peekable<Iter<'a, (usize, LineNo)>>,
 }
 
+#[allow(dead_code)]
 impl<'a> TracingIP<'a> {
     fn new(chunk: &'a Chunk, offset: usize) -> Self {
         let new_lines = chunk.lines.iter().peekable();

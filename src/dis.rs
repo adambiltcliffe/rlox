@@ -1,6 +1,7 @@
 use crate::{Chunk, OpCode, TracingIP};
 use std::convert::TryFrom;
 
+#[allow(dead_code)]
 pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
     if ip.is_line_start {
         print!("{:5} {:04} ", ip.line.unwrap(), ip.offset)
@@ -34,6 +35,7 @@ fn constant_instruction(name: &str, ip: &mut TracingIP) {
     println!("{}", ip.chunk.constants[constant_index as usize]);
 }
 
+#[allow(dead_code)]
 pub(crate) fn disassemble_chunk(chunk: &Chunk, name: &str) {
     println!("== {} ==", name);
     let mut ip = TracingIP::new(chunk, 0);
