@@ -12,6 +12,9 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
     match OpCode::try_from(byte) {
         Ok(instruction) => match instruction {
             OpCode::Constant => constant_instruction("CONSTANT", ip),
+            OpCode::Nil => simple_instruction("NIL"),
+            OpCode::True => simple_instruction("TRUE"),
+            OpCode::False => simple_instruction("FALSE"),
             OpCode::Negate => simple_instruction("NEGATE"),
             OpCode::Add => simple_instruction("ADD"),
             OpCode::Subtract => simple_instruction("SUBTRACT"),

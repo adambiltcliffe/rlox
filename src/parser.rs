@@ -68,6 +68,18 @@ pub fn get_rule(ttype: TokenType) -> ParseRule {
             prefix: Some(number),
             ..ParseRule::default()
         },
+        TokenType::False => ParseRule {
+            prefix: Some(literal),
+            ..ParseRule::default()
+        },
+        TokenType::Nil => ParseRule {
+            prefix: Some(literal),
+            ..ParseRule::default()
+        },
+        TokenType::True => ParseRule {
+            prefix: Some(literal),
+            ..ParseRule::default()
+        },
         _ => ParseRule::default(),
     }
 }
@@ -104,4 +116,13 @@ fn binary(c: &mut Compiler) {
 fn number(c: &mut Compiler) {
     let n: f64 = c.unwrap_previous().content.unwrap().parse().unwrap();
     c.emit_constant(n.into());
+}
+
+fn literal(c: &mut Compiler) {
+    match c.unwrap_previous().ttype {
+        TokenType::False => c.emit_byte(OpCode::False.into()),
+        TokenType::Nil => c.emit_byte(OpCode::Nil.into()),
+        TokenType::True => c.emit_byte(OpCode::True.into()),
+        _ => unreachable!(),
+    }
 }

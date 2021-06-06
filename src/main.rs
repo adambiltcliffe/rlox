@@ -14,6 +14,9 @@ mod scanner;
 #[repr(u8)]
 enum OpCode {
     Constant,
+    Nil,
+    True,
+    False,
     Negate,
     Add,
     Subtract,
@@ -308,6 +311,9 @@ impl VM {
                         let val = ip.read_constant();
                         self.stack.push(val);
                     }
+                    OpCode::Nil => self.stack.push(Value::Nil),
+                    OpCode::True => self.stack.push(Value::Bool(true)),
+                    OpCode::False => self.stack.push(Value::Bool(false)),
                     OpCode::Negate => {
                         if let Value::Number(n) = self.peek_stack(0) {
                             self.pop_stack()?;
