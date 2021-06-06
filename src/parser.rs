@@ -102,6 +102,6 @@ fn binary(c: &mut Compiler) {
 }
 
 fn number(c: &mut Compiler) {
-    let value: Value = c.unwrap_previous().content.unwrap().parse().unwrap();
-    c.emit_constant(value);
+    let n: f64 = c.unwrap_previous().content.unwrap().parse().unwrap();
+    c.emit_constant(n.into());
 }

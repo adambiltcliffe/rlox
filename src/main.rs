@@ -1,5 +1,6 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
+use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
@@ -21,7 +22,77 @@ enum OpCode {
     Return,
 }
 
-type Value = f64;
+// As Value gets more complicated, need to check whether it can still be Copy
+#[derive(Copy, Clone)]
+pub enum Value {
+    Bool(bool),
+    Nil,
+    Number(f64),
+}
+
+impl Value {
+    fn is_bool(&self) -> bool {
+        match self {
+            Value::Bool(_) => true,
+            _ => false,
+        }
+    }
+    fn is_nil(&self) -> bool {
+        match self {
+            Value::Nil => true,
+            _ => false,
+        }
+    }
+    fn is_number(&self) -> bool {
+        match self {
+            Value::Number(_) => true,
+            _ => false,
+        }
+    }
+}
+
+impl From<bool> for Value {
+    fn from(b: bool) -> Self {
+        Value::Bool(b)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(n: f64) -> Self {
+        Value::Number(n)
+    }
+}
+
+impl TryFrom<Value> for bool {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, ()> {
+        match v {
+            Value::Bool(b) => Ok(b),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for f64 {
+    type Error = VMError;
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Number(n) => Ok(n),
+            _ => Err(VMError::RuntimeError(RuntimeError::TypeError)),
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bool(b) => write!(f, "{}", b),
+            Self::Nil => write!(f, "nil"),
+            Self::Number(n) => write!(f, "{}", n),
+        }
+    }
+}
+
 type LineNo = u32;
 
 pub struct Chunk {
@@ -151,6 +222,7 @@ pub enum CompileError {
 pub enum RuntimeError {
     EndOfChunk,
     StackUnderflow,
+    TypeError,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -182,6 +254,10 @@ impl VM {
         }
     }
 
+    fn peek_stack(&self, distance: usize) -> Value {
+        self.stack[self.stack.len() - 1 - distance]
+    }
+
     fn pop_stack(&mut self) -> ValueResult {
         match self.stack.pop() {
             Some(v) => Ok(v),
@@ -192,9 +268,12 @@ impl VM {
     fn run(&mut self, ip: &mut IP) -> InterpretResult {
         macro_rules! binary_op {
             ($op:tt) => {{
-                let b = self.pop_stack()?;
-                let a = self.pop_stack()?;
-                self.stack.push(a $op b);
+                if !self.peek_stack(0).is_number() || !self.peek_stack(1).is_number() {
+                    return self.runtime_error(RuntimeError::TypeError)
+                }
+                let b: f64 = self.pop_stack()?.try_into()?;
+                let a: f64= self.pop_stack()?.try_into()?;
+                self.stack.push((a $op b).into());
          } };
         }
 
@@ -230,8 +309,12 @@ impl VM {
                         self.stack.push(val);
                     }
                     OpCode::Negate => {
-                        let val = self.pop_stack()?;
-                        self.stack.push(-val);
+                        if let Value::Number(n) = self.peek_stack(0) {
+                            self.pop_stack()?;
+                            self.stack.push((-n).into())
+                        } else {
+                            return self.runtime_error(RuntimeError::TypeError);
+                        }
                     }
                     OpCode::Add => binary_op!(+),
                     OpCode::Subtract => binary_op!(-),
@@ -245,6 +328,12 @@ impl VM {
                 Err(_) => println!("(ignoring unknown opcode)"),
             }
         }
+    }
+
+    fn runtime_error(&mut self, e: RuntimeError) -> InterpretResult {
+        self.stack.clear();
+        // TODO: this should do something cleverer
+        Err(VMError::RuntimeError(e))
     }
 }
 
