@@ -81,7 +81,9 @@ impl TryFrom<Value> for f64 {
     fn try_from(v: Value) -> Result<Self, Self::Error> {
         match v {
             Value::Number(n) => Ok(n),
-            _ => Err(VMError::RuntimeError(RuntimeError::TypeError)),
+            _ => Err(VMError::RuntimeError(RuntimeError::TypeError(
+                "Numeric value required.".to_owned(),
+            ))),
         }
     }
 }
@@ -221,17 +223,29 @@ pub enum CompileError {
     TooManyConstants,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum RuntimeError {
+    UnknownOpcode,
     EndOfChunk,
     StackUnderflow,
-    TypeError,
+    TypeError(String),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum VMError {
     CompileError(CompileError),
     RuntimeError(RuntimeError),
+}
+
+impl fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RuntimeError::UnknownOpcode => write!(f, "Unknown opcode."),
+            RuntimeError::EndOfChunk => write!(f, "Unexpected end of chunk."),
+            RuntimeError::StackUnderflow => write!(f, "Stack underflow."),
+            RuntimeError::TypeError(m) => write!(f, "{}", m),
+        }
+    }
 }
 
 type CompilerResult = Result<Chunk, CompileError>;
@@ -272,7 +286,7 @@ impl VM {
         macro_rules! binary_op {
             ($op:tt) => {{
                 if !self.peek_stack(0).is_number() || !self.peek_stack(1).is_number() {
-                    return self.runtime_error(RuntimeError::TypeError)
+                    return rt(RuntimeError::TypeError(format!("Operands must be numbers.")))
                 }
                 let b: f64 = self.pop_stack()?.try_into()?;
                 let a: f64= self.pop_stack()?.try_into()?;
@@ -288,7 +302,7 @@ impl VM {
         loop {
             // Performance-wise, we may want to delete this eventually
             if !ip.valid() {
-                return Err(VMError::RuntimeError(RuntimeError::EndOfChunk));
+                return rt(RuntimeError::EndOfChunk);
             }
 
             #[cfg(feature = "trace")]
@@ -319,7 +333,9 @@ impl VM {
                             self.pop_stack()?;
                             self.stack.push((-n).into())
                         } else {
-                            return self.runtime_error(RuntimeError::TypeError);
+                            return rt(RuntimeError::TypeError(format!(
+                                "Operand must be a number."
+                            )));
                         }
                     }
                     OpCode::Add => binary_op!(+),
@@ -331,15 +347,9 @@ impl VM {
                         return Ok(());
                     }
                 },
-                Err(_) => println!("(ignoring unknown opcode)"),
+                Err(_) => return rt(RuntimeError::UnknownOpcode),
             }
         }
-    }
-
-    fn runtime_error(&mut self, e: RuntimeError) -> InterpretResult {
-        self.stack.clear();
-        // TODO: this should do something cleverer
-        Err(VMError::RuntimeError(e))
     }
 }
 
@@ -364,8 +374,13 @@ fn repl(vm: &mut VM) {
         return;
     }
     for line in std::io::stdin().lock().lines() {
-        // We have already printed output in the case of an error, so squelch it
-        vm.interpret_source(&line.unwrap()).unwrap_or(());
+        match vm.interpret_source(&line.unwrap()) {
+            Err(VMError::RuntimeError(e)) => {
+                report_runtime_error(e);
+                vm.stack.clear();
+            }
+            _ => (),
+        };
         print!("> ");
         if let Err(_) = std::io::stdout().flush() {
             eprintln!("I/O error: unable to flush stdout.");
@@ -382,7 +397,18 @@ fn run_file(vm: &mut VM, path: &str) -> ! {
     let exitcode = match vm.interpret_source(&source) {
         Ok(()) => 0,
         Err(VMError::CompileError(_)) => 65,
-        Err(VMError::RuntimeError(_)) => 70,
+        Err(VMError::RuntimeError(e)) => {
+            report_runtime_error(e);
+            70
+        }
     };
     std::process::exit(exitcode);
+}
+
+fn rt(e: RuntimeError) -> InterpretResult {
+    Err(VMError::RuntimeError(e))
+}
+
+fn report_runtime_error(e: RuntimeError) {
+    println!("Runtime error: {}", e);
 }
