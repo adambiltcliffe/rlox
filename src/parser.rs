@@ -64,6 +64,40 @@ pub fn get_rule(ttype: TokenType) -> ParseRule {
             infix: Some(binary),
             precedence: Precedence::Factor,
         },
+        TokenType::Bang => ParseRule {
+            prefix: Some(unary),
+            ..ParseRule::default()
+        },
+        TokenType::BangEqual => ParseRule {
+            prefix: None,
+            infix: Some(binary),
+            precedence: Precedence::Equality,
+        },
+        TokenType::EqualEqual => ParseRule {
+            prefix: None,
+            infix: Some(binary),
+            precedence: Precedence::Equality,
+        },
+        TokenType::Greater => ParseRule {
+            prefix: None,
+            infix: Some(binary),
+            precedence: Precedence::Comparison,
+        },
+        TokenType::GreaterEqual => ParseRule {
+            prefix: None,
+            infix: Some(binary),
+            precedence: Precedence::Comparison,
+        },
+        TokenType::Less => ParseRule {
+            prefix: None,
+            infix: Some(binary),
+            precedence: Precedence::Comparison,
+        },
+        TokenType::LessEqual => ParseRule {
+            prefix: None,
+            infix: Some(binary),
+            precedence: Precedence::Comparison,
+        },
         TokenType::NumberLiteral => ParseRule {
             prefix: Some(number),
             ..ParseRule::default()
@@ -96,6 +130,7 @@ fn unary(c: &mut Compiler) {
     c.parse_precedence(Precedence::Unary);
     match op_type {
         TokenType::Minus => c.emit_byte_with_line(OpCode::Negate.into(), line),
+        TokenType::Bang => c.emit_byte_with_line(OpCode::Not.into(), line),
         _ => unreachable!(),
     }
 }
@@ -105,6 +140,12 @@ fn binary(c: &mut Compiler) {
     let precedence: usize = get_rule(ttype).precedence.into();
     c.parse_precedence(Precedence::try_from(precedence + 1).unwrap());
     match ttype {
+        TokenType::BangEqual => c.emit_bytes(OpCode::Equal.into(), OpCode::Not.into()),
+        TokenType::EqualEqual => c.emit_byte(OpCode::Equal.into()),
+        TokenType::Greater => c.emit_byte(OpCode::Greater.into()),
+        TokenType::GreaterEqual => c.emit_bytes(OpCode::Less.into(), OpCode::Not.into()),
+        TokenType::Less => c.emit_byte(OpCode::Less.into()),
+        TokenType::LessEqual => c.emit_bytes(OpCode::Greater.into(), OpCode::Not.into()),
         TokenType::Plus => c.emit_byte(OpCode::Add.into()),
         TokenType::Minus => c.emit_byte(OpCode::Subtract.into()),
         TokenType::Star => c.emit_byte(OpCode::Multiply.into()),

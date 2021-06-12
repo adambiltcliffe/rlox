@@ -19,11 +19,15 @@ enum OpCode {
     Nil,
     True,
     False,
+    Equal,
+    Greater,
+    Less,
     Negate,
     Add,
     Subtract,
     Multiply,
     Divide,
+    Not,
     Return,
 }
 
@@ -277,6 +281,13 @@ impl VM {
                     OpCode::Nil => self.stack.push(Value::Nil),
                     OpCode::True => self.stack.push(Value::Bool(true)),
                     OpCode::False => self.stack.push(Value::Bool(false)),
+                    OpCode::Equal => {
+                        let a = self.pop_stack()?;
+                        let b = self.pop_stack()?;
+                        self.stack.push((a == b).into());
+                    }
+                    OpCode::Greater => binary_op!(>),
+                    OpCode::Less => binary_op!(<),
                     OpCode::Negate => {
                         let n: f64 = self.pop_stack()?.try_into()?;
                         self.stack.push((-n).into());
@@ -285,6 +296,10 @@ impl VM {
                     OpCode::Subtract => binary_op!(-),
                     OpCode::Multiply => binary_op!(*),
                     OpCode::Divide => binary_op!(/),
+                    OpCode::Not => {
+                        let b = self.pop_stack()?.is_falsey();
+                        self.stack.push(b.into());
+                    }
                     OpCode::Return => {
                         println!("{}", self.pop_stack()?);
                         return Ok(());
