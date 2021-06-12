@@ -1,6 +1,7 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode, Value};
+use crate::value::Value;
+use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 
 fn report_error(message: &str, token: &Token) {
     eprint!("[line {}] Error", token.line);
