@@ -1,12 +1,17 @@
 use crate::{RuntimeError, VMError};
 use std::convert::TryFrom;
 use std::fmt;
+use std::rc;
+
+pub type ObjectRoot = rc::Rc<HeapEntry>;
+pub type ObjectRef = rc::Weak<HeapEntry>;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ValueType {
     Bool,
     Nil,
     Number,
+    String,
 }
 
 impl fmt::Display for ValueType {
@@ -18,17 +23,18 @@ impl fmt::Display for ValueType {
                 Self::Bool => "bool",
                 Self::Nil => "nil",
                 Self::Number => "number",
+                Self::String => "string",
             }
         )
     }
 }
 
-// As Value gets more complicated, need to check whether it can still be Copy
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub enum Value {
     Bool(bool),
     Nil,
     Number(f64),
+    Object(ObjectRef),
 }
 
 impl Value {
@@ -37,6 +43,7 @@ impl Value {
             Value::Bool(_) => ValueType::Bool,
             Value::Nil => ValueType::Nil,
             Value::Number(_) => ValueType::Number,
+            Value::Object(entry) => entry.upgrade().unwrap().get_type(),
         }
     }
     fn is_bool(&self) -> bool {
@@ -79,6 +86,12 @@ impl From<f64> for Value {
     }
 }
 
+impl From<ObjectRef> for Value {
+    fn from(w: rc::Weak<HeapEntry>) -> Self {
+        Value::Object(w)
+    }
+}
+
 impl TryFrom<Value> for bool {
     type Error = VMError;
     fn try_from(v: Value) -> Result<Self, Self::Error> {
@@ -111,6 +124,7 @@ impl fmt::Display for Value {
             Self::Bool(b) => write!(f, "{}", b),
             Self::Nil => write!(f, "nil"),
             Self::Number(n) => write!(f, "{}", n),
+            Self::Object(obj) => write!(f, "{}", format_obj(obj)),
         }
     }
 }
@@ -121,7 +135,42 @@ impl PartialEq for Value {
             (Value::Bool(a), Value::Bool(b)) => (a == b),
             (Value::Nil, Value::Nil) => true,
             (Value::Number(a), Value::Number(b)) => (a == b),
+            (Value::Object(a), Value::Object(b)) => {
+                let a = &a.upgrade().unwrap().content;
+                let b = &b.upgrade().unwrap().content;
+                match (a, b) {
+                    (Object::String(x), Object::String(y)) => x == y,
+                }
+            }
             _ => false,
         }
+    }
+}
+
+pub struct HeapEntry {
+    content: Object,
+}
+
+impl HeapEntry {
+    pub fn get_type(&self) -> ValueType {
+        match self.content {
+            Object::String(_) => ValueType::String,
+        }
+    }
+
+    pub fn new_string(s: &str) -> Self {
+        Self {
+            content: Object::String(s.to_owned()),
+        }
+    }
+}
+
+enum Object {
+    String(String),
+}
+
+fn format_obj(w: &ObjectRef) -> String {
+    match &w.upgrade().unwrap().content {
+        Object::String(s) => s.clone(),
     }
 }

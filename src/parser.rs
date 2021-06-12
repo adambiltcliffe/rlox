@@ -1,8 +1,10 @@
 use crate::compiler::Compiler;
 use crate::scanner::TokenType;
+use crate::value::HeapEntry;
 use crate::OpCode;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
+use std::rc::Rc;
 
 #[derive(PartialOrd, PartialEq, Ord, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(usize)]
@@ -98,6 +100,10 @@ pub fn get_rule(ttype: TokenType) -> ParseRule {
             infix: Some(binary),
             precedence: Precedence::Comparison,
         },
+        TokenType::StringLiteral => ParseRule {
+            prefix: Some(string),
+            ..ParseRule::default()
+        },
         TokenType::NumberLiteral => ParseRule {
             prefix: Some(number),
             ..ParseRule::default()
@@ -157,6 +163,14 @@ fn binary(c: &mut Compiler) {
 fn number(c: &mut Compiler) {
     let n: f64 = c.unwrap_previous().content.unwrap().parse().unwrap();
     c.emit_constant(n.into());
+}
+
+fn string(c: &mut Compiler) {
+    let content = c.unwrap_previous().content.unwrap();
+    let h = Rc::new(HeapEntry::new_string(&content[1..content.len() - 1]));
+    let w = Rc::downgrade(&h);
+    c.add_object(h);
+    c.emit_constant(w.into());
 }
 
 fn literal(c: &mut Compiler) {

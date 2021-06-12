@@ -4,7 +4,7 @@ use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
-use value::{Value, ValueType};
+use value::{ObjectRoot, Value, ValueType};
 
 mod compiler;
 mod dis;
@@ -114,7 +114,7 @@ impl<'a> TracingIP<'a> {
 
     fn read_constant(&mut self) -> Value {
         let index = self.read();
-        self.chunk.constants[index as usize]
+        self.chunk.constants[index as usize].clone()
     }
 
     fn get_line(&self) -> Option<LineNo> {
@@ -150,7 +150,7 @@ impl<'a> IP<'a> {
 
     fn read_constant(&mut self) -> Value {
         let index = self.read();
-        self.chunk.constants[index as usize]
+        self.chunk.constants[index as usize].clone()
     }
 
     // This is much more expensive than with TracingIP because this is the
@@ -198,7 +198,7 @@ impl fmt::Display for RuntimeError {
     }
 }
 
-type CompilerResult = Result<Chunk, CompileError>;
+type CompilerResult = Result<(Chunk, Vec<ObjectRoot>), CompileError>;
 type ValueResult = Result<Value, VMError>;
 type InterpretResult = Result<(), VMError>;
 
@@ -212,7 +212,7 @@ impl VM {
     }
 
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
-        let chunk = compiler::compile(source).map_err(VMError::CompileError)?;
+        let (chunk, _roots) = compiler::compile(source).map_err(VMError::CompileError)?;
         let mut ip = IP::new(&chunk, 0);
         let result = self.run(&mut ip);
         if let Err(VMError::RuntimeError(ref e)) = result {
@@ -228,7 +228,7 @@ impl VM {
     }
 
     fn peek_stack(&self, distance: usize) -> Value {
-        self.stack[self.stack.len() - 1 - distance]
+        self.stack[self.stack.len() - 1 - distance].clone()
     }
 
     fn pop_stack(&mut self) -> ValueResult {

@@ -1,7 +1,8 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::Value;
+use crate::value::{HeapEntry, ObjectRoot, Value};
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
+use std::rc::Rc;
 
 fn report_error(message: &str, token: &Token) {
     eprint!("[line {}] Error", token.line);
@@ -20,6 +21,7 @@ pub struct Compiler<'a> {
     first_error: Option<CompileError>,
     panic_mode: bool,
     chunk: Chunk,
+    objects: Vec<ObjectRoot>,
 }
 
 impl<'a> Compiler<'a> {
@@ -31,7 +33,12 @@ impl<'a> Compiler<'a> {
             first_error: None,
             panic_mode: false,
             chunk: Chunk::new(),
+            objects: Vec::new(),
         }
+    }
+
+    pub fn add_object(&mut self, obj: Rc<HeapEntry>) {
+        self.objects.push(obj)
     }
 
     pub fn unwrap_previous(&self) -> &Token {
@@ -151,6 +158,6 @@ pub fn compile(source: &str) -> CompilerResult {
     compiler.end();
     match compiler.first_error {
         Some(e) => Err(e),
-        None => Ok(compiler.chunk),
+        None => Ok((compiler.chunk, compiler.objects)),
     }
 }
