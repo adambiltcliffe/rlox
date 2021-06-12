@@ -289,7 +289,12 @@ impl VM {
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
         let chunk = compiler::compile(source).map_err(VMError::CompileError)?;
         let mut ip = IP::new(&chunk, 0);
-        self.run(&mut ip)
+        let result = self.run(&mut ip);
+        if let Err(VMError::RuntimeError(ref e)) = result {
+            println!("Runtime error: {}", e);
+            self.stack.clear();
+        }
+        result
     }
 
     fn peek_stack(&self, distance: usize) -> Value {
@@ -383,13 +388,8 @@ fn repl(vm: &mut VM) {
     print!("> ");
     std::io::stdout().flush().expect("Error writing to stdout.");
     for line in std::io::stdin().lock().lines() {
-        match vm.interpret_source(&line.unwrap()) {
-            Err(VMError::RuntimeError(e)) => {
-                report_runtime_error(e);
-                vm.stack.clear();
-            }
-            _ => (),
-        };
+        // Following line silences the error since we already handled it
+        vm.interpret_source(&line.unwrap()).unwrap_or(());
         print!("> ");
         std::io::stdout().flush().expect("Error writing to stdout.");
     }
@@ -403,18 +403,11 @@ fn run_file(vm: &mut VM, path: &str) -> ! {
     let exitcode = match vm.interpret_source(&source) {
         Ok(()) => 0,
         Err(VMError::CompileError(_)) => 65,
-        Err(VMError::RuntimeError(e)) => {
-            report_runtime_error(e);
-            70
-        }
+        Err(VMError::RuntimeError(_)) => 70,
     };
     std::process::exit(exitcode);
 }
 
 fn rt(e: RuntimeError) -> InterpretResult {
     Err(VMError::RuntimeError(e))
-}
-
-fn report_runtime_error(e: RuntimeError) {
-    println!("Runtime error: {}", e);
 }
