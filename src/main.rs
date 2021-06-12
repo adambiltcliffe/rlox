@@ -25,6 +25,27 @@ enum OpCode {
     Return,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum ValueType {
+    Bool,
+    Nil,
+    Number,
+}
+
+impl fmt::Display for ValueType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Bool => "bool",
+                Self::Nil => "nil",
+                Self::Number => "number",
+            }
+        )
+    }
+}
+
 // As Value gets more complicated, need to check whether it can still be Copy
 #[derive(Copy, Clone)]
 pub enum Value {
@@ -67,11 +88,14 @@ impl From<f64> for Value {
 }
 
 impl TryFrom<Value> for bool {
-    type Error = ();
-    fn try_from(v: Value) -> Result<Self, ()> {
+    type Error = VMError;
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
         match v {
             Value::Bool(b) => Ok(b),
-            _ => Err(()),
+            _ => Err(VMError::RuntimeError(RuntimeError::TypeError(
+                ValueType::Bool,
+                v.to_string(),
+            ))),
         }
     }
 }
@@ -82,7 +106,8 @@ impl TryFrom<Value> for f64 {
         match v {
             Value::Number(n) => Ok(n),
             _ => Err(VMError::RuntimeError(RuntimeError::TypeError(
-                "Numeric value required.".to_owned(),
+                ValueType::Number,
+                v.to_string(),
             ))),
         }
     }
@@ -228,7 +253,7 @@ pub enum RuntimeError {
     UnknownOpcode,
     EndOfChunk,
     StackUnderflow,
-    TypeError(String),
+    TypeError(ValueType, String),
 }
 
 #[derive(Debug, Clone)]
@@ -243,7 +268,7 @@ impl fmt::Display for RuntimeError {
             RuntimeError::UnknownOpcode => write!(f, "Unknown opcode."),
             RuntimeError::EndOfChunk => write!(f, "Unexpected end of chunk."),
             RuntimeError::StackUnderflow => write!(f, "Stack underflow."),
-            RuntimeError::TypeError(m) => write!(f, "{}", m),
+            RuntimeError::TypeError(t, v) => write!(f, "Expected a {} value but found: {}.", t, v),
         }
     }
 }
@@ -285,9 +310,6 @@ impl VM {
     fn run(&mut self, ip: &mut IP) -> InterpretResult {
         macro_rules! binary_op {
             ($op:tt) => {{
-                if !self.peek_stack(0).is_number() || !self.peek_stack(1).is_number() {
-                    return rt(RuntimeError::TypeError(format!("Operands must be numbers.")))
-                }
                 let b: f64 = self.pop_stack()?.try_into()?;
                 let a: f64= self.pop_stack()?.try_into()?;
                 self.stack.push((a $op b).into());
@@ -329,14 +351,8 @@ impl VM {
                     OpCode::True => self.stack.push(Value::Bool(true)),
                     OpCode::False => self.stack.push(Value::Bool(false)),
                     OpCode::Negate => {
-                        if let Value::Number(n) = self.peek_stack(0) {
-                            self.pop_stack()?;
-                            self.stack.push((-n).into())
-                        } else {
-                            return rt(RuntimeError::TypeError(format!(
-                                "Operand must be a number."
-                            )));
-                        }
+                        let n: f64 = self.pop_stack()?.try_into()?;
+                        self.stack.push((-n).into());
                     }
                     OpCode::Add => binary_op!(+),
                     OpCode::Subtract => binary_op!(-),
@@ -369,10 +385,7 @@ fn main() {
 
 fn repl(vm: &mut VM) {
     print!("> ");
-    if let Err(_) = std::io::stdout().flush() {
-        eprintln!("I/O error: unable to flush stdout.");
-        return;
-    }
+    std::io::stdout().flush().expect("Error writing to stdout.");
     for line in std::io::stdin().lock().lines() {
         match vm.interpret_source(&line.unwrap()) {
             Err(VMError::RuntimeError(e)) => {
@@ -382,10 +395,7 @@ fn repl(vm: &mut VM) {
             _ => (),
         };
         print!("> ");
-        if let Err(_) = std::io::stdout().flush() {
-            eprintln!("I/O error: unable to flush stdout.");
-            return;
-        }
+        std::io::stdout().flush().expect("Error writing to stdout.");
     }
 }
 
