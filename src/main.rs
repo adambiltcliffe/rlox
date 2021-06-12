@@ -287,12 +287,9 @@ impl VM {
     }
 
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
-        compiler::compile(source)
-            .map_err(VMError::CompileError)
-            .and_then(|chunk| {
-                let mut ip = IP::new(&chunk, 0);
-                self.run(&mut ip)
-            })
+        let chunk = compiler::compile(source).map_err(VMError::CompileError)?;
+        let mut ip = IP::new(&chunk, 0);
+        self.run(&mut ip)
     }
 
     fn peek_stack(&self, distance: usize) -> Value {
