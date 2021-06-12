@@ -4,7 +4,7 @@ use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
-use value::{ObjectRoot, Value, ValueType};
+use value::{HeapEntry, ObjectRoot, Value, ValueType};
 
 mod compiler;
 mod dis;
@@ -179,6 +179,7 @@ pub enum RuntimeError {
     EndOfChunk,
     StackUnderflow,
     TypeError(ValueType, String),
+    InvalidAddition(String, String),
 }
 
 #[derive(Debug, Clone)]
@@ -194,6 +195,9 @@ impl fmt::Display for RuntimeError {
             RuntimeError::EndOfChunk => write!(f, "Unexpected end of chunk."),
             RuntimeError::StackUnderflow => write!(f, "Stack underflow."),
             RuntimeError::TypeError(t, v) => write!(f, "Expected a {} value but found: {}.", t, v),
+            RuntimeError::InvalidAddition(v1, v2) => {
+                write!(f, "Invalid types for + operator: {}, {}.", v1, v2)
+            }
         }
     }
 }
@@ -204,15 +208,20 @@ type InterpretResult = Result<(), VMError>;
 
 struct VM {
     stack: Vec<Value>,
+    objects: Vec<ObjectRoot>,
 }
 
 impl VM {
     fn new() -> Self {
-        Self { stack: Vec::new() }
+        Self {
+            stack: Vec::new(),
+            objects: Vec::new(),
+        }
     }
 
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
-        let (chunk, _roots) = compiler::compile(source).map_err(VMError::CompileError)?;
+        let (chunk, mut roots) = compiler::compile(source).map_err(VMError::CompileError)?;
+        self.objects.append(&mut roots);
         let mut ip = IP::new(&chunk, 0);
         let result = self.run(&mut ip);
         if let Err(VMError::RuntimeError(ref e)) = result {
@@ -262,13 +271,13 @@ impl VM {
             {
                 print!("          ");
                 if self.stack.len() == 0 {
-                    println!("<empty>");
+                    print!("<empty>");
                 } else {
                     for v in &self.stack {
                         print!("[ {} ]", v);
                     }
-                    println!("");
                 }
+                println!(" (heap objects: {})", self.objects.len());
                 dis::disassemble_instruction(&mut ip.clone());
             }
 
@@ -292,7 +301,30 @@ impl VM {
                         let n: f64 = self.pop_stack()?.try_into()?;
                         self.stack.push((-n).into());
                     }
-                    OpCode::Add => binary_op!(+),
+                    OpCode::Add => {
+                        let a = self.pop_stack()?;
+                        let b = self.pop_stack()?;
+                        match (a.get_type(), b.get_type()) {
+                            (ValueType::Number, ValueType::Number) => {
+                                let a: f64 = a.try_into()?;
+                                let b: f64 = b.try_into()?;
+                                self.stack.push((a + b).into())
+                            }
+                            (ValueType::String, ValueType::String) => {
+                                let a: String = a.try_into()?;
+                                let b: String = b.try_into()?;
+                                let (h, w) = HeapEntry::new_string(&(b + &a));
+                                self.objects.push(h);
+                                self.stack.push(w.into())
+                            }
+                            _ => {
+                                return rt(RuntimeError::InvalidAddition(
+                                    b.to_string(),
+                                    a.to_string(),
+                                ))
+                            }
+                        }
+                    }
                     OpCode::Subtract => binary_op!(-),
                     OpCode::Multiply => binary_op!(*),
                     OpCode::Divide => binary_op!(/),

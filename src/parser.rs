@@ -167,8 +167,7 @@ fn number(c: &mut Compiler) {
 
 fn string(c: &mut Compiler) {
     let content = c.unwrap_previous().content.unwrap();
-    let h = Rc::new(HeapEntry::new_string(&content[1..content.len() - 1]));
-    let w = Rc::downgrade(&h);
+    let (h, w) = HeapEntry::new_string(&content[1..content.len() - 1]);
     c.add_object(h);
     c.emit_constant(w.into());
 }

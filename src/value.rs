@@ -38,7 +38,7 @@ pub enum Value {
 }
 
 impl Value {
-    fn get_type(&self) -> ValueType {
+    pub fn get_type(&self) -> ValueType {
         match self {
             Value::Bool(_) => ValueType::Bool,
             Value::Nil => ValueType::Nil,
@@ -118,6 +118,22 @@ impl TryFrom<Value> for f64 {
     }
 }
 
+impl TryFrom<Value> for String {
+    type Error = VMError;
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        if let Value::Object(ref obj) = v {
+            #[allow(irrefutable_let_patterns)]
+            if let Object::String(s) = &obj.upgrade().unwrap().content {
+                return Ok(s.clone());
+            }
+        }
+        Err(VMError::RuntimeError(RuntimeError::TypeError(
+            ValueType::String,
+            v.to_string(),
+        )))
+    }
+}
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -158,10 +174,13 @@ impl HeapEntry {
         }
     }
 
-    pub fn new_string(s: &str) -> Self {
-        Self {
+    pub fn new_string(s: &str) -> (ObjectRoot,ObjectRef) {
+        let entry = Self {
             content: Object::String(s.to_owned()),
-        }
+        };
+        let oroot = rc::Rc::new(entry);
+        let oref = rc::Rc::downgrade(&oroot);
+        (oroot, oref)
     }
 }
 
