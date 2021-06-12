@@ -208,6 +208,10 @@ impl<'a> TracingIP<'a> {
         let index = self.read();
         self.chunk.constants[index as usize]
     }
+
+    fn get_line(&self) -> Option<LineNo> {
+        self.line
+    }
 }
 
 #[cfg(feature = "trace")]
@@ -239,6 +243,19 @@ impl<'a> IP<'a> {
     fn read_constant(&mut self) -> Value {
         let index = self.read();
         self.chunk.constants[index as usize]
+    }
+
+    // This is much more expensive than with TracingIP because this is the
+    // uncommon case we didn't optimise for
+    fn get_line(&self) -> Option<LineNo> {
+        let mut line: Option<LineNo> = None;
+        for &(offs, n) in self.chunk.lines.iter() {
+            if offs >= self.offset {
+                break;
+            }
+            line = Some(n)
+        }
+        line
     }
 }
 
@@ -291,6 +308,11 @@ impl VM {
         let mut ip = IP::new(&chunk, 0);
         let result = self.run(&mut ip);
         if let Err(VMError::RuntimeError(ref e)) = result {
+            if let Some(n) = ip.get_line() {
+                eprint!("[line {}] ", n);
+            } else {
+                eprint!("[unknown line] ");
+            }
             println!("Runtime error: {}", e);
             self.stack.clear();
         }
