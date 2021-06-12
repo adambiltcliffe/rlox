@@ -1,6 +1,6 @@
 use crate::compiler::Compiler;
 use crate::scanner::TokenType;
-use crate::{OpCode, Value};
+use crate::OpCode;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 
