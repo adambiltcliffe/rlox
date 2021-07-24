@@ -2,6 +2,7 @@ use crate::{VM, RuntimeError, VMError};
 use std::convert::TryFrom;
 use std::fmt;
 use std::rc;
+use std::hash::{Hash,Hasher};
 
 pub type ObjectRoot = rc::Rc<HeapEntry>;
 pub type ObjectRef = rc::Weak<HeapEntry>;
@@ -175,13 +176,21 @@ impl HeapEntry {
     }
 
     pub fn create_string(vm: &mut VM, s: &str) -> ObjectRef {
-        let entry = Self {
-            content: Object::String(s.to_owned()),
-        };
-        let oroot = rc::Rc::new(entry);
-        let oref = rc::Rc::downgrade(&oroot);
-        vm.objects.push(oroot);
-        oref
+        use rc::Rc;
+        match vm.strings.get(s) {
+            Some(InternedString(oroot)) => Rc::downgrade(oroot),
+            None => {
+                let entry = Self {
+                    content: Object::String(s.to_owned()),
+                };
+                let oroot = Rc::new(entry);
+                let oref = Rc::downgrade(&oroot);
+                let interned = InternedString(Rc::clone(&oroot));
+                vm.strings.insert(interned);
+                vm.objects.push(oroot);
+                oref
+            }
+        }
     }
 }
 
@@ -192,5 +201,33 @@ enum Object {
 fn format_obj(w: &ObjectRef) -> String {
     match &w.upgrade().unwrap().content {
         Object::String(s) => s.clone(),
+    }
+}
+
+pub struct InternedString(ObjectRoot);
+
+impl Hash for InternedString {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        match &self.0.content {
+            Object::String(s) => s.hash(h)
+        }
+    }
+}
+
+impl PartialEq for InternedString {
+    fn eq(&self, other: &Self) -> bool {
+        match(&self.0.content, &other.0.content) {
+            (Object::String(a), Object::String(b)) => a == b
+        }
+    }
+}
+
+impl Eq for InternedString {}
+
+impl std::borrow::Borrow<str> for InternedString {
+    fn borrow(&self) -> &str {
+        match &self.0.content {
+            Object::String(s) => s.borrow()
+        }
     }
 }

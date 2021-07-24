@@ -1,9 +1,9 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
-use std::rc::Rc;
 use std::slice::Iter;
 use value::{HeapEntry, ObjectRoot, Value, ValueType};
 
@@ -210,6 +210,7 @@ type InterpretResult = Result<(), VMError>;
 pub struct VM {
     stack: Vec<Value>,
     objects: Vec<ObjectRoot>,
+    strings: HashSet<value::InternedString>,
 }
 
 impl VM {
@@ -217,6 +218,7 @@ impl VM {
         Self {
             stack: Vec::new(),
             objects: Vec::new(),
+            strings: HashSet::new(),
         }
     }
 
@@ -277,7 +279,11 @@ impl VM {
                         print!("[ {} ]", v);
                     }
                 }
-                println!(" (heap objects: {})", self.objects.len());
+                println!(
+                    " (heap: {}, strings: {})",
+                    self.objects.len(),
+                    self.strings.len()
+                );
                 dis::disassemble_instruction(&mut ip.clone());
             }
 
