@@ -152,13 +152,10 @@ impl PartialEq for Value {
             (Value::Bool(a), Value::Bool(b)) => (a == b),
             (Value::Nil, Value::Nil) => true,
             (Value::Number(a), Value::Number(b)) => (a == b),
-            // can we optimise string equality since they should reference the same Rc?
+            // Value equality is pointer equality for interned strings
+            // Need to recheck this when we have other heap objects
             (Value::Object(a), Value::Object(b)) => {
-                let a = &a.upgrade().unwrap().content;
-                let b = &b.upgrade().unwrap().content;
-                match (a, b) {
-                    (Object::String(x), Object::String(y)) => x == y,
-                }
+                rc::Weak::ptr_eq(a, b)
             }
             _ => false,
         }
