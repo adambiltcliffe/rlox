@@ -1,4 +1,4 @@
-use crate::{RuntimeError, VMError};
+use crate::{VM, RuntimeError, VMError};
 use std::convert::TryFrom;
 use std::fmt;
 use std::rc;
@@ -174,13 +174,14 @@ impl HeapEntry {
         }
     }
 
-    pub fn new_string(s: &str) -> (ObjectRoot,ObjectRef) {
+    pub fn create_string(vm: &mut VM, s: &str) -> ObjectRef {
         let entry = Self {
             content: Object::String(s.to_owned()),
         };
         let oroot = rc::Rc::new(entry);
         let oref = rc::Rc::downgrade(&oroot);
-        (oroot, oref)
+        vm.objects.push(oroot);
+        oref
     }
 }
 

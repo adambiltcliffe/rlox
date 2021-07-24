@@ -1,6 +1,6 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::{HeapEntry, ObjectRoot, Value};
+use crate::value::{ObjectRef, ObjectRoot, Value};
 use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 use std::rc::Rc;
@@ -16,14 +16,13 @@ fn report_error(message: &str, token: &Token) {
 }
 
 pub struct Compiler<'src, 'vm> {
-    vm: &'vm mut VM,
-    scanner: Scanner<'src>,
-    previous: Option<Token<'src>>,
-    current: Option<Token<'src>>,
+    pub vm: &'vm mut VM,
+    pub scanner: Scanner<'src>,
+    pub previous: Option<Token<'src>>,
+    pub current: Option<Token<'src>>,
     first_error: Option<CompileError>,
     panic_mode: bool,
     chunk: Chunk,
-    objects: Vec<ObjectRoot>,
 }
 
 impl<'src, 'vm> Compiler<'src, 'vm> {
@@ -36,12 +35,13 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
             first_error: None,
             panic_mode: false,
             chunk: Chunk::new(),
-            objects: Vec::new(),
         }
     }
 
-    pub fn add_object(&mut self, obj: Rc<HeapEntry>) {
-        self.objects.push(obj)
+    pub fn add_object(&mut self, obj: ObjectRoot) -> ObjectRef {
+        let oref = Rc::downgrade(&obj);
+        self.vm.objects.push(obj);
+        oref
     }
 
     pub fn unwrap_previous(&self) -> &Token {
@@ -161,6 +161,6 @@ pub(crate) fn compile(source: &str, vm: &mut VM) -> CompilerResult {
     compiler.end();
     match compiler.first_error {
         Some(e) => Err(e),
-        None => Ok((compiler.chunk, compiler.objects)),
+        None => Ok(compiler.chunk),
     }
 }

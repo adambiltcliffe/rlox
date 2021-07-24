@@ -3,6 +3,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
+use std::rc::Rc;
 use std::slice::Iter;
 use value::{HeapEntry, ObjectRoot, Value, ValueType};
 
@@ -202,11 +203,11 @@ impl fmt::Display for RuntimeError {
     }
 }
 
-type CompilerResult = Result<(Chunk, Vec<ObjectRoot>), CompileError>;
+type CompilerResult = Result<Chunk, CompileError>;
 type ValueResult = Result<Value, VMError>;
 type InterpretResult = Result<(), VMError>;
 
-pub(crate) struct VM {
+pub struct VM {
     stack: Vec<Value>,
     objects: Vec<ObjectRoot>,
 }
@@ -220,8 +221,7 @@ impl VM {
     }
 
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
-        let (chunk, mut roots) = compiler::compile(source, self).map_err(VMError::CompileError)?;
-        self.objects.append(&mut roots);
+        let chunk = compiler::compile(source, self).map_err(VMError::CompileError)?;
         let mut ip = IP::new(&chunk, 0);
         let result = self.run(&mut ip);
         if let Err(VMError::RuntimeError(ref e)) = result {
@@ -313,8 +313,7 @@ impl VM {
                             (ValueType::String, ValueType::String) => {
                                 let a: String = a.try_into()?;
                                 let b: String = b.try_into()?;
-                                let (h, w) = HeapEntry::new_string(&(b + &a));
-                                self.objects.push(h);
+                                let w = HeapEntry::create_string(self, &(b + &a));
                                 self.stack.push(w.into())
                             }
                             _ => {

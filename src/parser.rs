@@ -165,9 +165,10 @@ fn number(c: &mut Compiler) {
 }
 
 fn string(c: &mut Compiler) {
-    let content = c.unwrap_previous().content.unwrap();
-    let (h, w) = HeapEntry::new_string(&content[1..content.len() - 1]);
-    c.add_object(h);
+    let vm = &mut c.vm;
+    let prev = &c.previous;
+    let content = prev.as_ref().unwrap().content.unwrap();
+    let w = HeapEntry::create_string(vm, &content[1..content.len() - 1]);
     c.emit_constant(w.into());
 }
 
