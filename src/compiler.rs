@@ -1,6 +1,7 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
 use crate::value::{HeapEntry, ObjectRoot, Value};
+use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 use std::rc::Rc;
 
@@ -14,20 +15,22 @@ fn report_error(message: &str, token: &Token) {
     eprintln!(": {}", message)
 }
 
-pub struct Compiler<'a> {
-    scanner: Scanner<'a>,
-    previous: Option<Token<'a>>,
-    current: Option<Token<'a>>,
+pub struct Compiler<'src, 'vm> {
+    vm: &'vm mut VM,
+    scanner: Scanner<'src>,
+    previous: Option<Token<'src>>,
+    current: Option<Token<'src>>,
     first_error: Option<CompileError>,
     panic_mode: bool,
     chunk: Chunk,
     objects: Vec<ObjectRoot>,
 }
 
-impl<'a> Compiler<'a> {
-    fn new(scanner: Scanner<'a>) -> Self {
+impl<'src, 'vm> Compiler<'src, 'vm> {
+    fn new(scanner: Scanner<'src>, vm: &'vm mut VM) -> Self {
         Self {
             scanner,
+            vm,
             current: None,
             previous: None,
             first_error: None,
@@ -149,9 +152,9 @@ impl<'a> Compiler<'a> {
     }
 }
 
-pub fn compile(source: &str) -> CompilerResult {
+pub(crate) fn compile(source: &str, vm: &mut VM) -> CompilerResult {
     let scanner = Scanner::new(source);
-    let mut compiler = Compiler::new(scanner);
+    let mut compiler = Compiler::new(scanner, vm);
     compiler.advance();
     compiler.expression();
     compiler.consume(TokenType::EOF, "Expect end of expression.");

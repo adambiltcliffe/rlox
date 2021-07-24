@@ -206,7 +206,7 @@ type CompilerResult = Result<(Chunk, Vec<ObjectRoot>), CompileError>;
 type ValueResult = Result<Value, VMError>;
 type InterpretResult = Result<(), VMError>;
 
-struct VM {
+pub(crate) struct VM {
     stack: Vec<Value>,
     objects: Vec<ObjectRoot>,
 }
@@ -220,7 +220,7 @@ impl VM {
     }
 
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
-        let (chunk, mut roots) = compiler::compile(source).map_err(VMError::CompileError)?;
+        let (chunk, mut roots) = compiler::compile(source, self).map_err(VMError::CompileError)?;
         self.objects.append(&mut roots);
         let mut ip = IP::new(&chunk, 0);
         let result = self.run(&mut ip);

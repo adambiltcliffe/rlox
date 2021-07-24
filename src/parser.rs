@@ -4,7 +4,6 @@ use crate::value::HeapEntry;
 use crate::OpCode;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
-use std::rc::Rc;
 
 #[derive(PartialOrd, PartialEq, Ord, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(usize)]
@@ -22,7 +21,7 @@ pub enum Precedence {
     Primary = 10,
 }
 
-type ParseFn = fn(&mut Compiler<'_>);
+type ParseFn = fn(&mut Compiler<'_, '_>);
 
 pub struct ParseRule {
     pub prefix: Option<ParseFn>,
