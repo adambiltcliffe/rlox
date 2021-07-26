@@ -116,6 +116,30 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
 
     pub fn declaration(&mut self) {
         self.statement();
+        if self.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    pub fn synchronize(&mut self) {
+        self.panic_mode = false;
+        while self.unwrap_current().ttype != TokenType::EOF {
+            if self.unwrap_previous().ttype == TokenType::Semicolon {
+                return;
+            }
+            match self.unwrap_current().ttype {
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
+                _ => (),
+            }
+            self.advance();
+        }
     }
 
     pub fn statement(&mut self) {
