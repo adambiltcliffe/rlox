@@ -1,6 +1,6 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::Value;
+use crate::value::{HeapEntry, Value};
 use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 
@@ -98,6 +98,53 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         }
     }
 
+    pub fn parse_variable(&mut self, message: &str) -> u8 {
+        self.consume(TokenType::Identifier, message);
+        let name = &self.previous.as_ref().unwrap().content.unwrap();
+        let vm = &mut self.vm;
+        let v: Value = HeapEntry::create_string(vm, name).into();
+        self.identifier_constant(v)
+    }
+
+    pub fn identifier_constant(&mut self, name: Value) -> u8 {
+        if let Some(constant) = self.get_current_chunk().add_constant(name) {
+            return constant;
+        } else {
+            self.error(
+                "Too many constants in one chunk.",
+                CompileError::TooManyConstants,
+            );
+            0 // AWFUL HACK HERE PLS FIX
+        }
+    }
+
+    /*
+        pub fn emit_constant(&mut self, value: Value) {
+            if let Some(constant) = self.get_current_chunk().add_constant(value) {
+                self.emit_bytes(OpCode::Constant.into(), constant)
+            } else {
+                self.error(
+                    "Too many constants in one chunk.",
+                    CompileError::TooManyConstants,
+                )
+            }
+        }
+    */
+
+    /*
+        fn string(c: &mut Compiler) {
+            let vm = &mut c.vm;
+            let prev = &c.previous;
+            let content = prev.as_ref().unwrap().content.unwrap();
+            let w = HeapEntry::create_string(vm, &content[1..content.len() - 1]);
+            c.emit_constant(w.into());
+        }
+    */
+
+    pub fn define_variable(&mut self, global: u8) {
+        self.emit_bytes(OpCode::DefineGlobal.into(), global);
+    }
+
     pub fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment)
     }
@@ -115,10 +162,28 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     pub fn declaration(&mut self) {
-        self.statement();
+        if self.match_token(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
         if self.panic_mode {
             self.synchronize();
         }
+    }
+
+    pub fn var_declaration(&mut self) {
+        let global = self.parse_variable("Expect variable name.");
+        if self.match_token(TokenType::Equal) {
+            self.expression();
+        } else {
+            self.emit_byte(OpCode::Nil.into());
+        }
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        );
+        self.define_variable(global);
     }
 
     pub fn synchronize(&mut self) {

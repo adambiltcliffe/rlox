@@ -31,6 +31,7 @@ enum OpCode {
     Not,
     Print,
     Pop,
+    DefineGlobal,
     Return,
 }
 
@@ -343,6 +344,15 @@ impl VM {
                         println!("{}", self.pop_stack()?);
                     }
                     OpCode::Pop => {
+                        self.pop_stack()?;
+                    }
+                    OpCode::DefineGlobal => {
+                        let val = ip.read_constant();
+                        println!(
+                            "Setting the value of variable {} to {}",
+                            val,
+                            self.peek_stack(0)
+                        );
                         self.pop_stack()?;
                     }
                     OpCode::Return => {
