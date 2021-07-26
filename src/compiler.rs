@@ -100,10 +100,14 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
 
     pub fn parse_variable(&mut self, message: &str) -> Result<u8, CompileError> {
         self.consume(TokenType::Identifier, message);
+        let v = self.previous_identifier();
+        self.identifier_constant(v)
+    }
+
+    pub fn previous_identifier(&mut self) -> Value {
         let name = &self.previous.as_ref().unwrap().content.unwrap();
         let vm = &mut self.vm;
-        let v: Value = HeapEntry::create_string(vm, name).into();
-        self.identifier_constant(v)
+        HeapEntry::create_string(vm, name).into()
     }
 
     pub fn identifier_constant(&mut self, name: Value) -> Result<u8, CompileError> {
@@ -197,7 +201,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.panic_mode = true
     }
 
-    fn error(&mut self, message: &str, ce: CompileError) {
+    pub(crate) fn error(&mut self, message: &str, ce: CompileError) {
         if self.panic_mode {
             return;
         }

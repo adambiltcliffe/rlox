@@ -240,14 +240,6 @@ impl std::borrow::Borrow<str> for InternedString {
     }
 }
 
-/*
-impl std::borrow::Borrow<Value> for InternedString {
-    fn borrow(&self) -> &Value {
-        &Value::Object(rc::Rc::downgrade(&self.0))
-    }
-}
-*/
-
 impl TryFrom<Value> for InternedString {
     type Error = VMError;
     fn try_from(v: Value) -> Result<Self, Self::Error> {

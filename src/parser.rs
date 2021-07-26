@@ -1,5 +1,5 @@
 use crate::compiler::Compiler;
-use crate::scanner::TokenType;
+use crate::scanner::{Token, TokenType};
 use crate::value::HeapEntry;
 use crate::OpCode;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -99,6 +99,10 @@ pub fn get_rule(ttype: TokenType) -> ParseRule {
             infix: Some(binary),
             precedence: Precedence::Comparison,
         },
+        TokenType::Identifier => ParseRule {
+            prefix: Some(variable),
+            ..ParseRule::default()
+        },
         TokenType::StringLiteral => ParseRule {
             prefix: Some(string),
             ..ParseRule::default()
@@ -170,6 +174,16 @@ fn string(c: &mut Compiler) {
     let content = prev.as_ref().unwrap().content.unwrap();
     let w = HeapEntry::create_string(vm, &content[1..content.len() - 1]);
     c.emit_constant(w.into());
+}
+
+fn variable(c: &mut Compiler) {
+    // unlike the book, this doesn't yet forward to named_variable() because
+    // doing so introduces a double-borrow problem we don't want to solve yet
+    let name = c.previous_identifier();
+    match c.identifier_constant(name) {
+        Err(e) => c.error(&format!("{}", e), e),
+        Ok(global) => c.emit_bytes(OpCode::GetGlobal.into(), global),
+    }
 }
 
 fn literal(c: &mut Compiler) {

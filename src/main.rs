@@ -31,6 +31,7 @@ enum OpCode {
     Not,
     Print,
     Pop,
+    GetGlobal,
     DefineGlobal,
     Return,
 }
@@ -184,6 +185,7 @@ pub enum RuntimeError {
     StackUnderflow,
     TypeError(ValueType, String),
     InvalidAddition(String, String),
+    UndefinedVariable(String),
 }
 
 #[derive(Debug, Clone)]
@@ -211,6 +213,7 @@ impl fmt::Display for RuntimeError {
             RuntimeError::InvalidAddition(v1, v2) => {
                 write!(f, "Invalid types for + operator: {}, {}.", v1, v2)
             }
+            RuntimeError::UndefinedVariable(name) => write!(f, "Undefined variable: {}.", name),
         }
     }
 }
@@ -360,6 +363,16 @@ impl VM {
                     }
                     OpCode::Pop => {
                         self.pop_stack()?;
+                    }
+                    OpCode::GetGlobal => {
+                        let val = ip.read_constant();
+                        let interned: InternedString = val.clone().try_into()?;
+                        match self.globals.get(&interned) {
+                            Some(v) => {
+                                self.stack.push(v.clone());
+                            }
+                            None => return rt(RuntimeError::UndefinedVariable(val.try_into()?)),
+                        }
                     }
                     OpCode::DefineGlobal => {
                         let val = ip.read_constant();
