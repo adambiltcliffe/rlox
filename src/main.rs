@@ -60,12 +60,12 @@ impl Chunk {
         }
     }
 
-    fn add_constant(&mut self, value: Value) -> Option<u8> {
+    fn add_constant(&mut self, value: Value) -> Result<u8, CompileError> {
         if self.constants.len() > (u8::MAX as usize) {
-            return None;
+            return Err(CompileError::TooManyConstants);
         }
         self.constants.push(value);
-        Some((self.constants.len() - 1) as u8)
+        Ok((self.constants.len() - 1) as u8)
     }
 }
 
@@ -190,6 +190,15 @@ pub enum RuntimeError {
 pub enum VMError {
     CompileError(CompileError),
     RuntimeError(RuntimeError),
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CompileError::ParseError => write!(f, "Parse error."),
+            CompileError::TooManyConstants => write!(f, "Too many constants in one chunk."),
+        }
+    }
 }
 
 impl fmt::Display for RuntimeError {

@@ -98,7 +98,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         }
     }
 
-    pub fn parse_variable(&mut self, message: &str) -> u8 {
+    pub fn parse_variable(&mut self, message: &str) -> Result<u8, CompileError> {
         self.consume(TokenType::Identifier, message);
         let name = &self.previous.as_ref().unwrap().content.unwrap();
         let vm = &mut self.vm;
@@ -106,40 +106,9 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.identifier_constant(v)
     }
 
-    pub fn identifier_constant(&mut self, name: Value) -> u8 {
-        if let Some(constant) = self.get_current_chunk().add_constant(name) {
-            return constant;
-        } else {
-            self.error(
-                "Too many constants in one chunk.",
-                CompileError::TooManyConstants,
-            );
-            0 // AWFUL HACK HERE PLS FIX
-        }
+    pub fn identifier_constant(&mut self, name: Value) -> Result<u8, CompileError> {
+        self.get_current_chunk().add_constant(name)
     }
-
-    /*
-        pub fn emit_constant(&mut self, value: Value) {
-            if let Some(constant) = self.get_current_chunk().add_constant(value) {
-                self.emit_bytes(OpCode::Constant.into(), constant)
-            } else {
-                self.error(
-                    "Too many constants in one chunk.",
-                    CompileError::TooManyConstants,
-                )
-            }
-        }
-    */
-
-    /*
-        fn string(c: &mut Compiler) {
-            let vm = &mut c.vm;
-            let prev = &c.previous;
-            let content = prev.as_ref().unwrap().content.unwrap();
-            let w = HeapEntry::create_string(vm, &content[1..content.len() - 1]);
-            c.emit_constant(w.into());
-        }
-    */
 
     pub fn define_variable(&mut self, global: u8) {
         self.emit_bytes(OpCode::DefineGlobal.into(), global);
@@ -173,17 +142,21 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     pub fn var_declaration(&mut self) {
-        let global = self.parse_variable("Expect variable name.");
-        if self.match_token(TokenType::Equal) {
-            self.expression();
-        } else {
-            self.emit_byte(OpCode::Nil.into());
+        match self.parse_variable("Expect variable name.") {
+            Err(e) => self.error(&format!("{}", e), e),
+            Ok(global) => {
+                if self.match_token(TokenType::Equal) {
+                    self.expression();
+                } else {
+                    self.emit_byte(OpCode::Nil.into());
+                }
+                self.consume(
+                    TokenType::Semicolon,
+                    "Expect ';' after variable declaration.",
+                );
+                self.define_variable(global);
+            }
         }
-        self.consume(
-            TokenType::Semicolon,
-            "Expect ';' after variable declaration.",
-        );
-        self.define_variable(global);
     }
 
     pub fn synchronize(&mut self) {
@@ -252,13 +225,11 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     pub fn emit_constant(&mut self, value: Value) {
-        if let Some(constant) = self.get_current_chunk().add_constant(value) {
+        if let Ok(constant) = self.get_current_chunk().add_constant(value) {
             self.emit_bytes(OpCode::Constant.into(), constant)
         } else {
-            self.error(
-                "Too many constants in one chunk.",
-                CompileError::TooManyConstants,
-            )
+            let m: &str = &format!("{}", CompileError::TooManyConstants);
+            self.error(m, CompileError::TooManyConstants)
         }
     }
 
