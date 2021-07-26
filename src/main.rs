@@ -29,6 +29,8 @@ enum OpCode {
     Multiply,
     Divide,
     Not,
+    Print,
+    Pop,
     Return,
 }
 
@@ -337,8 +339,13 @@ impl VM {
                         let b = self.pop_stack()?.is_falsey();
                         self.stack.push(b.into());
                     }
-                    OpCode::Return => {
+                    OpCode::Print => {
                         println!("{}", self.pop_stack()?);
+                    }
+                    OpCode::Pop => {
+                        self.pop_stack()?;
+                    }
+                    OpCode::Return => {
                         return Ok(());
                     }
                 },

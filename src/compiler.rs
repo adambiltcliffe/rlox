@@ -1,9 +1,8 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::{ObjectRef, ObjectRoot, Value};
+use crate::value::Value;
 use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
-use std::rc::Rc;
 
 fn report_error(message: &str, token: &Token) {
     eprint!("[line {}] Error", token.line);
@@ -38,12 +37,6 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         }
     }
 
-    pub fn add_object(&mut self, obj: ObjectRoot) -> ObjectRef {
-        let oref = Rc::downgrade(&obj);
-        self.vm.objects.push(obj);
-        oref
-    }
-
     pub fn unwrap_previous(&self) -> &Token {
         self.previous.as_ref().unwrap()
     }
@@ -75,6 +68,21 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.error_at_current(message, CompileError::ParseError)
     }
 
+    pub fn check(&mut self, ttype: TokenType) -> bool {
+        if let Some(t) = &self.current {
+            return t.ttype == ttype;
+        }
+        false
+    }
+
+    pub fn match_token(&mut self, ttype: TokenType) -> bool {
+        if !self.check(ttype) {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
     pub fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
         match get_rule(self.unwrap_previous().ttype).prefix {
@@ -92,6 +100,30 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
 
     pub fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment)
+    }
+
+    pub fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+        self.emit_byte(OpCode::Pop.into());
+    }
+
+    pub fn print_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after value.");
+        self.emit_byte(OpCode::Print.into());
+    }
+
+    pub fn declaration(&mut self) {
+        self.statement();
+    }
+
+    pub fn statement(&mut self) {
+        if self.match_token(TokenType::Print) {
+            self.print_statement();
+        } else {
+            self.expression_statement();
+        }
     }
 
     fn error_at_current(&mut self, message: &str, ce: CompileError) {
@@ -156,7 +188,9 @@ pub(crate) fn compile(source: &str, vm: &mut VM) -> CompilerResult {
     let scanner = Scanner::new(source);
     let mut compiler = Compiler::new(scanner, vm);
     compiler.advance();
-    compiler.expression();
+    while !compiler.match_token(TokenType::EOF) {
+        compiler.declaration();
+    }
     compiler.consume(TokenType::EOF, "Expect end of expression.");
     compiler.end();
     match compiler.first_error {

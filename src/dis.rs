@@ -24,6 +24,8 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
             OpCode::Multiply => simple_instruction("MULTIPLY"),
             OpCode::Divide => simple_instruction("DIVIDE"),
             OpCode::Not => simple_instruction("NOT"),
+            OpCode::Print => simple_instruction("PRINT"),
+            OpCode::Pop => simple_instruction("POP"),
             OpCode::Return => simple_instruction("RETURN"),
         },
         Err(_) => {
