@@ -33,6 +33,7 @@ enum OpCode {
     Pop,
     GetGlobal,
     DefineGlobal,
+    SetGlobal,
     Return,
 }
 
@@ -379,6 +380,15 @@ impl VM {
                         let interned: InternedString = val.try_into()?;
                         self.globals.insert(interned, self.peek_stack(0));
                         self.pop_stack()?;
+                    }
+                    OpCode::SetGlobal => {
+                        let val = ip.read_constant();
+                        let interned: InternedString = val.clone().try_into()?;
+                        if self.globals.contains_key(&interned) {
+                            self.globals.insert(interned, self.peek_stack(0));
+                        } else {
+                            return rt(RuntimeError::UndefinedVariable(val.try_into()?));
+                        }
                     }
                     OpCode::Return => {
                         return Ok(());

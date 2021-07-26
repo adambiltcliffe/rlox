@@ -28,6 +28,7 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
             OpCode::Pop => simple_instruction("POP"),
             OpCode::GetGlobal => constant_instruction("GET_GLOBAL", ip),
             OpCode::DefineGlobal => constant_instruction("DEFINE_GLOBAL", ip),
+            OpCode::SetGlobal => constant_instruction("SET_GLOBAL", ip),
             OpCode::Return => simple_instruction("RETURN"),
         },
         Err(_) => {

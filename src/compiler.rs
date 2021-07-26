@@ -85,8 +85,9 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
 
     pub fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
+        let can_assign = prec <= Precedence::Assignment;
         match get_rule(self.unwrap_previous().ttype).prefix {
-            Some(rule) => rule(self),
+            Some(rule) => rule(self, can_assign),
             None => {
                 self.error("Expect expression.", CompileError::ParseError);
                 return;
@@ -94,7 +95,10 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         }
         while prec <= get_rule(self.unwrap_current().ttype).precedence {
             self.advance();
-            get_rule(self.unwrap_previous().ttype).infix.unwrap()(self);
+            get_rule(self.unwrap_previous().ttype).infix.unwrap()(self, can_assign);
+        }
+        if can_assign && self.match_token(TokenType::Equal) {
+            self.error("Invalid assignment target.", CompileError::ParseError);
         }
     }
 

@@ -1,5 +1,5 @@
 use crate::compiler::Compiler;
-use crate::scanner::{Token, TokenType};
+use crate::scanner::TokenType;
 use crate::value::HeapEntry;
 use crate::OpCode;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -21,7 +21,7 @@ pub enum Precedence {
     Primary = 10,
 }
 
-type ParseFn = fn(&mut Compiler<'_, '_>);
+type ParseFn = fn(&mut Compiler<'_, '_>, bool);
 
 pub struct ParseRule {
     pub prefix: Option<ParseFn>,
@@ -127,12 +127,12 @@ pub fn get_rule(ttype: TokenType) -> ParseRule {
     }
 }
 
-fn grouping(c: &mut Compiler) {
+fn grouping(c: &mut Compiler, _can_assign: bool) {
     c.expression();
     c.consume(TokenType::RightParen, "Expect ')' after expression.")
 }
 
-fn unary(c: &mut Compiler) {
+fn unary(c: &mut Compiler, _can_assign: bool) {
     let token = c.unwrap_previous();
     let op_type = token.ttype;
     let line = token.line;
@@ -144,7 +144,7 @@ fn unary(c: &mut Compiler) {
     }
 }
 
-fn binary(c: &mut Compiler) {
+fn binary(c: &mut Compiler, _can_assign: bool) {
     let ttype = c.unwrap_previous().ttype;
     let precedence: usize = get_rule(ttype).precedence.into();
     c.parse_precedence(Precedence::try_from(precedence + 1).unwrap());
@@ -163,12 +163,12 @@ fn binary(c: &mut Compiler) {
     }
 }
 
-fn number(c: &mut Compiler) {
+fn number(c: &mut Compiler, _can_assign: bool) {
     let n: f64 = c.unwrap_previous().content.unwrap().parse().unwrap();
     c.emit_constant(n.into());
 }
 
-fn string(c: &mut Compiler) {
+fn string(c: &mut Compiler, _can_assign: bool) {
     let vm = &mut c.vm;
     let prev = &c.previous;
     let content = prev.as_ref().unwrap().content.unwrap();
@@ -176,17 +176,24 @@ fn string(c: &mut Compiler) {
     c.emit_constant(w.into());
 }
 
-fn variable(c: &mut Compiler) {
+fn variable(c: &mut Compiler, can_assign: bool) {
     // unlike the book, this doesn't yet forward to named_variable() because
     // doing so introduces a double-borrow problem we don't want to solve yet
     let name = c.previous_identifier();
     match c.identifier_constant(name) {
         Err(e) => c.error(&format!("{}", e), e),
-        Ok(global) => c.emit_bytes(OpCode::GetGlobal.into(), global),
+        Ok(global) => {
+            if can_assign && c.match_token(TokenType::Equal) {
+                c.expression();
+                c.emit_bytes(OpCode::SetGlobal.into(), global)
+            } else {
+                c.emit_bytes(OpCode::GetGlobal.into(), global)
+            }
+        }
     }
 }
 
-fn literal(c: &mut Compiler) {
+fn literal(c: &mut Compiler, _can_assign: bool) {
     match c.unwrap_previous().ttype {
         TokenType::False => c.emit_byte(OpCode::False.into()),
         TokenType::Nil => c.emit_byte(OpCode::Nil.into()),
