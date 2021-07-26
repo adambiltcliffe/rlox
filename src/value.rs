@@ -196,10 +196,20 @@ enum Object {
     String(String),
 }
 
-fn format_obj(w: &ObjectRef) -> String {
+pub fn format_obj(w: &ObjectRef) -> String {
     match &w.upgrade().unwrap().content {
-        Object::String(s) => s.clone(),
+        Object::String(s) => format!("\"{}\"", s).to_owned(),
     }
+}
+
+pub fn printable_value(v: Value) -> String {
+    if let Value::Object(oref) = &v {
+        #[allow(irrefutable_let_patterns)]
+        if let Object::String(s) =  &oref.upgrade().unwrap().content {
+            return format!("{}", s).to_owned();
+        }
+    }
+format!("{}", v)
 }
 
 pub struct InternedString(ObjectRoot);
@@ -228,4 +238,31 @@ impl std::borrow::Borrow<str> for InternedString {
             Object::String(s) => s.borrow()
         }
     }
+}
+
+/*
+impl std::borrow::Borrow<Value> for InternedString {
+    fn borrow(&self) -> &Value {
+        &Value::Object(rc::Rc::downgrade(&self.0))
+    }
+}
+*/
+
+impl TryFrom<Value> for InternedString {
+    type Error = VMError;
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Object(oref) => {
+                Ok(Self(oref.upgrade().unwrap()))
+            }, _ => Err(VMError::RuntimeError(RuntimeError::TypeError(ValueType::String, v.to_string())))
+        }
+    }
+}
+
+impl fmt::Display for InternedString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match &(*self.0).content {
+            Object::String(s) => s
+        };
+        write!(f, "{}", text)}
 }

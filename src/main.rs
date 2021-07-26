@@ -1,11 +1,11 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
-use value::{HeapEntry, ObjectRoot, Value, ValueType};
+use value::{HeapEntry, InternedString, ObjectRoot, Value, ValueType};
 
 mod compiler;
 mod dis;
@@ -223,6 +223,7 @@ pub struct VM {
     stack: Vec<Value>,
     objects: Vec<ObjectRoot>,
     strings: HashSet<value::InternedString>,
+    globals: HashMap<value::InternedString, Value>,
 }
 
 impl VM {
@@ -231,6 +232,7 @@ impl VM {
             stack: Vec::new(),
             objects: Vec::new(),
             strings: HashSet::new(),
+            globals: HashMap::new(),
         }
     }
 
@@ -291,11 +293,15 @@ impl VM {
                         print!("[ {} ]", v);
                     }
                 }
-                println!(
+                print!(
                     " (heap: {}, strings: {})",
                     self.objects.len(),
                     self.strings.len()
                 );
+                for (k, v) in &self.globals {
+                    print!(" {}={}", k, v);
+                }
+                println!("");
                 dis::disassemble_instruction(&mut ip.clone());
             }
 
@@ -350,18 +356,15 @@ impl VM {
                         self.stack.push(b.into());
                     }
                     OpCode::Print => {
-                        println!("{}", self.pop_stack()?);
+                        println!("{}", value::printable_value(self.pop_stack()?));
                     }
                     OpCode::Pop => {
                         self.pop_stack()?;
                     }
                     OpCode::DefineGlobal => {
                         let val = ip.read_constant();
-                        println!(
-                            "Setting the value of variable {} to {}",
-                            val,
-                            self.peek_stack(0)
-                        );
+                        let interned: InternedString = val.try_into()?;
+                        self.globals.insert(interned, self.peek_stack(0));
                         self.pop_stack()?;
                     }
                     OpCode::Return => {
