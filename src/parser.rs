@@ -186,15 +186,25 @@ fn string(c: &mut Compiler, _can_assign: bool) {
 fn variable(c: &mut Compiler, can_assign: bool) {
     // unlike the book, this doesn't yet forward to named_variable() because
     // doing so introduces a double-borrow problem we don't want to solve yet
-    let name = c.previous_identifier();
-    match c.identifier_constant(name) {
-        Err(e) => c.error(&format!("{}", e), e),
-        Ok(global) => {
+    let name_str = c.previous.as_ref().unwrap().content.unwrap();
+    let name_val = c.previous_identifier();
+    let slot = c.resolve_local(name_str);
+    let (get_op, set_op, arg) = match slot {
+        Some(a) => (OpCode::GetLocal, OpCode::SetLocal, Ok(a)),
+        None => (
+            OpCode::GetGlobal,
+            OpCode::SetGlobal,
+            c.identifier_constant(name_val),
+        ),
+    };
+    match arg {
+        Err(e) => c.short_error(e),
+        Ok(a) => {
             if can_assign && c.match_token(TokenType::Equal) {
                 c.expression();
-                c.emit_bytes(OpCode::SetGlobal.into(), global)
+                c.emit_bytes(set_op.into(), a)
             } else {
-                c.emit_bytes(OpCode::GetGlobal.into(), global)
+                c.emit_bytes(get_op.into(), a)
             }
         }
     }

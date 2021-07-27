@@ -3,6 +3,7 @@ use crate::scanner::{Scanner, Token, TokenType};
 use crate::value::{HeapEntry, Value};
 use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
+use std::convert::TryInto;
 
 fn report_error(message: &str, token: &Token) {
     eprint!("[line {}] Error", token.line);
@@ -175,6 +176,15 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
             depth: Some(self.scope_depth),
         };
         self.locals.push(local);
+    }
+
+    pub fn resolve_local(&mut self, name: &str) -> Option<u8> {
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name == name {
+                return Some(i.try_into().unwrap());
+            }
+        }
+        return None;
     }
 
     pub fn define_variable(&mut self, global: Option<u8>) {

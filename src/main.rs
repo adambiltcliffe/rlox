@@ -31,6 +31,8 @@ enum OpCode {
     Not,
     Print,
     Pop,
+    GetLocal,
+    SetLocal,
     GetGlobal,
     DefineGlobal,
     SetGlobal,
@@ -370,6 +372,14 @@ impl VM {
                     }
                     OpCode::Pop => {
                         self.pop_stack()?;
+                    }
+                    OpCode::GetLocal => {
+                        let slot = ip.read();
+                        self.stack.push(self.stack[slot as usize].clone());
+                    }
+                    OpCode::SetLocal => {
+                        let slot = ip.read();
+                        self.stack[slot as usize] = self.peek_stack(0).clone();
                     }
                     OpCode::GetGlobal => {
                         let val = ip.read_constant();

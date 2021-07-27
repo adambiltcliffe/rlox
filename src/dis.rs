@@ -26,6 +26,8 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
             OpCode::Not => simple_instruction("NOT"),
             OpCode::Print => simple_instruction("PRINT"),
             OpCode::Pop => simple_instruction("POP"),
+            OpCode::GetLocal => byte_instruction("GET_LOCAL", ip),
+            OpCode::SetLocal => byte_instruction("SET_LOCAL", ip),
             OpCode::GetGlobal => constant_instruction("GET_GLOBAL", ip),
             OpCode::DefineGlobal => constant_instruction("DEFINE_GLOBAL", ip),
             OpCode::SetGlobal => constant_instruction("SET_GLOBAL", ip),
@@ -39,6 +41,11 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
 
 fn simple_instruction(name: &str) {
     println!("{}", name);
+}
+
+fn byte_instruction(name: &str, ip: &mut TracingIP) {
+    let byte = ip.read();
+    println!("{:<16} {:<4}", name, byte);
 }
 
 fn constant_instruction(name: &str, ip: &mut TracingIP) {
