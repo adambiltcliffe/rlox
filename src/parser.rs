@@ -133,7 +133,7 @@ fn grouping(c: &mut Compiler, _can_assign: bool) {
 }
 
 fn unary(c: &mut Compiler, _can_assign: bool) {
-    let token = c.unwrap_previous();
+    let token = c.previous.as_ref().unwrap();
     let op_type = token.ttype;
     let line = token.line;
     c.parse_precedence(Precedence::Unary);
@@ -145,7 +145,7 @@ fn unary(c: &mut Compiler, _can_assign: bool) {
 }
 
 fn binary(c: &mut Compiler, _can_assign: bool) {
-    let ttype = c.unwrap_previous().ttype;
+    let ttype = c.previous.as_ref().unwrap().ttype;
     let precedence: usize = get_rule(ttype).precedence.into();
     c.parse_precedence(Precedence::try_from(precedence + 1).unwrap());
     match ttype {
@@ -164,7 +164,14 @@ fn binary(c: &mut Compiler, _can_assign: bool) {
 }
 
 fn number(c: &mut Compiler, _can_assign: bool) {
-    let n: f64 = c.unwrap_previous().content.unwrap().parse().unwrap();
+    let n: f64 = c
+        .previous
+        .as_ref()
+        .unwrap()
+        .content
+        .unwrap()
+        .parse()
+        .unwrap();
     c.emit_constant(n.into());
 }
 
@@ -194,7 +201,7 @@ fn variable(c: &mut Compiler, can_assign: bool) {
 }
 
 fn literal(c: &mut Compiler, _can_assign: bool) {
-    match c.unwrap_previous().ttype {
+    match c.previous.as_ref().unwrap().ttype {
         TokenType::False => c.emit_byte(OpCode::False.into()),
         TokenType::Nil => c.emit_byte(OpCode::Nil.into()),
         TokenType::True => c.emit_byte(OpCode::True.into()),

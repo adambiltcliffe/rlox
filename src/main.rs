@@ -177,6 +177,8 @@ impl<'a> IP<'a> {
 pub enum CompileError {
     ParseError,
     TooManyConstants,
+    TooManyLocals,
+    DuplicateName,
 }
 
 #[derive(Debug, Clone)]
@@ -200,6 +202,10 @@ impl fmt::Display for CompileError {
         match self {
             CompileError::ParseError => write!(f, "Parse error."),
             CompileError::TooManyConstants => write!(f, "Too many constants in one chunk."),
+            CompileError::TooManyLocals => write!(f, "Too many local variables in function."),
+            CompileError::DuplicateName => {
+                write!(f, "Already a variable with this name in this scope.")
+            }
         }
     }
 }

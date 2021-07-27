@@ -14,6 +14,11 @@ fn report_error(message: &str, token: &Token) {
     eprintln!(": {}", message)
 }
 
+pub struct Local<'src> {
+    name: &'src str,
+    depth: Option<usize>,
+}
+
 pub struct Compiler<'src, 'vm> {
     pub vm: &'vm mut VM,
     pub scanner: Scanner<'src>,
@@ -22,6 +27,9 @@ pub struct Compiler<'src, 'vm> {
     first_error: Option<CompileError>,
     panic_mode: bool,
     chunk: Chunk,
+    locals: Vec<Local<'src>>,
+    local_count: usize,
+    scope_depth: usize,
 }
 
 impl<'src, 'vm> Compiler<'src, 'vm> {
@@ -34,15 +42,24 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
             first_error: None,
             panic_mode: false,
             chunk: Chunk::new(),
+            locals: Vec::new(),
+            local_count: 0,
+            scope_depth: 0,
         }
     }
 
-    pub fn unwrap_previous(&self) -> &Token {
-        self.previous.as_ref().unwrap()
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
     }
 
-    pub fn unwrap_current(&self) -> &Token {
-        self.current.as_ref().unwrap()
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+        while !self.locals.is_empty()
+            && self.locals.last().unwrap().depth.unwrap() > self.scope_depth
+        {
+            self.emit_byte(OpCode::Pop.into());
+            self.locals.pop();
+        }
     }
 
     pub fn advance(&mut self) {
@@ -86,26 +103,32 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     pub fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
         let can_assign = prec <= Precedence::Assignment;
-        match get_rule(self.unwrap_previous().ttype).prefix {
+        match get_rule(self.previous.as_ref().unwrap().ttype).prefix {
             Some(rule) => rule(self, can_assign),
             None => {
                 self.error("Expect expression.", CompileError::ParseError);
                 return;
             }
         }
-        while prec <= get_rule(self.unwrap_current().ttype).precedence {
+        while prec <= get_rule(self.current.as_ref().unwrap().ttype).precedence {
             self.advance();
-            get_rule(self.unwrap_previous().ttype).infix.unwrap()(self, can_assign);
+            get_rule(self.previous.as_ref().unwrap().ttype)
+                .infix
+                .unwrap()(self, can_assign);
         }
         if can_assign && self.match_token(TokenType::Equal) {
             self.error("Invalid assignment target.", CompileError::ParseError);
         }
     }
 
-    pub fn parse_variable(&mut self, message: &str) -> Result<u8, CompileError> {
+    pub fn parse_variable(&mut self, message: &str) -> Result<Option<u8>, CompileError> {
         self.consume(TokenType::Identifier, message);
+        self.declare_variable();
+        if self.scope_depth > 0 {
+            return Ok(None);
+        }
         let v = self.previous_identifier();
-        self.identifier_constant(v)
+        self.identifier_constant(v).map(Some)
     }
 
     pub fn previous_identifier(&mut self) -> Value {
@@ -118,8 +141,53 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.get_current_chunk().add_constant(name)
     }
 
-    pub fn define_variable(&mut self, global: u8) {
-        self.emit_bytes(OpCode::DefineGlobal.into(), global);
+    pub fn declare_variable(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
+        let name = self.previous.as_ref().unwrap().content.unwrap();
+        let mut is_duplicate = false;
+        for local in self.locals.iter().rev() {
+            if let Some(d) = local.depth {
+                if d < self.scope_depth {
+                    break;
+                }
+            }
+            if name == local.name {
+                is_duplicate = true;
+                break;
+            }
+        }
+        if is_duplicate {
+            self.short_error(CompileError::DuplicateName)
+        } else {
+            self.add_local(name);
+        }
+    }
+
+    pub fn add_local(&mut self, name: &'src str) {
+        if self.local_count == u8::MAX as usize + 1 {
+            self.short_error(CompileError::TooManyLocals);
+            return;
+        }
+        let local = Local {
+            name: name,
+            depth: Some(self.scope_depth),
+        };
+        self.locals.push(local);
+    }
+
+    pub fn define_variable(&mut self, global: Option<u8>) {
+        if self.scope_depth == 0 {
+            self.emit_bytes(OpCode::DefineGlobal.into(), global.unwrap());
+        }
+    }
+
+    pub fn block(&mut self) {
+        while !self.check(TokenType::RightBrace) && !self.check(TokenType::EOF) {
+            self.declaration();
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
     pub fn expression(&mut self) {
@@ -169,11 +237,11 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
 
     pub fn synchronize(&mut self) {
         self.panic_mode = false;
-        while self.unwrap_current().ttype != TokenType::EOF {
-            if self.unwrap_previous().ttype == TokenType::Semicolon {
+        while self.current.as_ref().unwrap().ttype != TokenType::EOF {
+            if self.previous.as_ref().unwrap().ttype == TokenType::Semicolon {
                 return;
             }
-            match self.unwrap_current().ttype {
+            match self.current.as_ref().unwrap().ttype {
                 TokenType::Class
                 | TokenType::Fun
                 | TokenType::Var
@@ -191,6 +259,10 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     pub fn statement(&mut self) {
         if self.match_token(TokenType::Print) {
             self.print_statement();
+        } else if self.match_token(TokenType::LeftBrace) {
+            self.begin_scope();
+            self.block();
+            self.end_scope();
         } else {
             self.expression_statement();
         }
@@ -212,6 +284,10 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         report_error(message, self.previous.as_ref().unwrap());
         self.first_error = self.first_error.or(Some(ce));
         self.panic_mode = true
+    }
+
+    pub(crate) fn short_error(&mut self, ce: CompileError) {
+        self.error(&ce.to_string(), ce);
     }
 
     fn get_current_chunk(&mut self) -> &mut Chunk {
