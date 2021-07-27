@@ -173,7 +173,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         }
         let local = Local {
             name: name,
-            depth: Some(self.scope_depth),
+            depth: None,
         };
         self.locals.push(local);
     }
@@ -181,6 +181,9 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     pub fn resolve_local(&mut self, name: &str) -> Option<u8> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == name {
+                if local.depth.is_none() {
+                    self.short_error(CompileError::UninitializedLocal)
+                }
                 return Some(i.try_into().unwrap());
             }
         }
@@ -190,6 +193,8 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     pub fn define_variable(&mut self, global: Option<u8>) {
         if self.scope_depth == 0 {
             self.emit_bytes(OpCode::DefineGlobal.into(), global.unwrap());
+        } else {
+            self.locals.last_mut().unwrap().depth = Some(self.scope_depth);
         }
     }
 

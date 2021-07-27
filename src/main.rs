@@ -181,6 +181,7 @@ pub enum CompileError {
     TooManyConstants,
     TooManyLocals,
     DuplicateName,
+    UninitializedLocal,
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +208,9 @@ impl fmt::Display for CompileError {
             CompileError::TooManyLocals => write!(f, "Too many local variables in function."),
             CompileError::DuplicateName => {
                 write!(f, "Already a variable with this name in this scope.")
+            }
+            CompileError::UninitializedLocal => {
+                write!(f, "Can't read local variable in its own initializer.")
             }
         }
     }
