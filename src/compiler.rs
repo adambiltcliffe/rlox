@@ -221,6 +221,22 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.emit_byte(OpCode::Print.into());
     }
 
+    pub fn if_statement(&mut self) {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop.into());
+        self.statement();
+        let else_jump = self.emit_jump(OpCode::Jump);
+        self.patch_jump(then_jump);
+        self.emit_byte(OpCode::Pop.into());
+        if self.match_token(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
+    }
+
     pub fn declaration(&mut self) {
         if self.match_token(TokenType::Var) {
             self.var_declaration();
@@ -274,6 +290,8 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     pub fn statement(&mut self) {
         if self.match_token(TokenType::Print) {
             self.print_statement();
+        } else if self.match_token(TokenType::If) {
+            self.if_statement();
         } else if self.match_token(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -317,6 +335,24 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     pub fn emit_bytes(&mut self, byte1: u8, byte2: u8) {
         self.emit_byte(byte1);
         self.emit_byte(byte2);
+    }
+
+    pub fn emit_jump(&mut self, instruction: OpCode) -> usize {
+        self.emit_byte(instruction.into());
+        self.emit_byte(0xff_u8);
+        self.emit_byte(0xff_u8);
+        self.get_current_chunk().code.len() - 2
+    }
+
+    pub fn patch_jump(&mut self, offset: usize) {
+        let code = &mut self.get_current_chunk().code;
+        let jump = code.len() - offset - 2;
+        if jump > u16::MAX as usize {
+            self.short_error(CompileError::TooFarToJump)
+        } else {
+            code[offset] = ((jump >> 8) & 0xff) as u8;
+            code[offset + 1] = (jump & 0xff) as u8;
+        }
     }
 
     pub fn emit_byte_with_line(&mut self, byte: u8, line: LineNo) {

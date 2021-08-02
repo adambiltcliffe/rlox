@@ -15,7 +15,7 @@ mod value;
 
 #[derive(IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
-enum OpCode {
+pub enum OpCode {
     Constant,
     Nil,
     True,
@@ -30,6 +30,8 @@ enum OpCode {
     Divide,
     Not,
     Print,
+    Jump,
+    JumpIfFalse,
     Pop,
     GetLocal,
     SetLocal,
@@ -120,6 +122,12 @@ impl<'a> TracingIP<'a> {
         result
     }
 
+    fn read_short(&mut self) -> u16 {
+        let high = self.read() as u16;
+        let low = self.read() as u16;
+        (high << 8) | low
+    }
+
     fn read_constant(&mut self) -> Value {
         let index = self.read();
         self.chunk.constants[index as usize].clone()
@@ -156,6 +164,12 @@ impl<'a> IP<'a> {
         result
     }
 
+    fn read_short(&mut self) -> u16 {
+        let high = self.read() as u16;
+        let low = self.read() as u16;
+        (high << 8) | low
+    }
+
     fn read_constant(&mut self) -> Value {
         let index = self.read();
         self.chunk.constants[index as usize].clone()
@@ -182,6 +196,7 @@ pub enum CompileError {
     TooManyLocals,
     DuplicateName,
     UninitializedLocal,
+    TooFarToJump,
 }
 
 #[derive(Debug, Clone)]
@@ -212,6 +227,7 @@ impl fmt::Display for CompileError {
             CompileError::UninitializedLocal => {
                 write!(f, "Can't read local variable in its own initializer.")
             }
+            CompileError::TooFarToJump => write!(f, "Too much code to jump over."),
         }
     }
 }
@@ -262,7 +278,7 @@ impl VM {
             } else {
                 eprint!("[unknown line] ");
             }
-            println!("Runtime error: {}", e);
+            eprintln!("Runtime error: {}", e);
             self.stack.clear();
         }
         result
@@ -373,6 +389,16 @@ impl VM {
                     }
                     OpCode::Print => {
                         println!("{}", value::printable_value(self.pop_stack()?));
+                    }
+                    OpCode::Jump => {
+                        let offset = ip.read_short() as usize;
+                        ip.offset += offset;
+                    }
+                    OpCode::JumpIfFalse => {
+                        let offset = ip.read_short() as usize;
+                        if self.peek_stack(0).is_falsey() {
+                            ip.offset += offset;
+                        }
                     }
                     OpCode::Pop => {
                         self.pop_stack()?;
