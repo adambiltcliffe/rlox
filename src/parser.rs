@@ -123,6 +123,16 @@ pub fn get_rule(ttype: TokenType) -> ParseRule {
             prefix: Some(literal),
             ..ParseRule::default()
         },
+        TokenType::And => ParseRule {
+            prefix: None,
+            infix: Some(and_op),
+            precedence: Precedence::And,
+        },
+        TokenType::Or => ParseRule {
+            prefix: None,
+            infix: Some(or_op),
+            precedence: Precedence::Or,
+        },
         _ => ParseRule::default(),
     }
 }
@@ -217,4 +227,20 @@ fn literal(c: &mut Compiler, _can_assign: bool) {
         TokenType::True => c.emit_byte(OpCode::True.into()),
         _ => unreachable!(),
     }
+}
+
+fn and_op(c: &mut Compiler, _can_assign: bool) {
+    let end_jump = c.emit_jump(OpCode::JumpIfFalse);
+    c.emit_byte(OpCode::Pop.into());
+    c.parse_precedence(Precedence::And);
+    c.patch_jump(end_jump);
+}
+
+fn or_op(c: &mut Compiler, _can_assign: bool) {
+    let else_jump = c.emit_jump(OpCode::JumpIfFalse);
+    let end_jump = c.emit_jump(OpCode::Jump);
+    c.patch_jump(else_jump);
+    c.emit_byte(OpCode::Pop.into());
+    c.parse_precedence(Precedence::Or);
+    c.patch_jump(end_jump);
 }
