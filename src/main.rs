@@ -248,7 +248,6 @@ impl fmt::Display for RuntimeError {
                     return write!(f, "Operands must be {}s.", t);
                 }
             }
-
             RuntimeError::InvalidAddition(v1, v2) => {
                 #[cfg(not(feature = "lox_errors"))]
                 {
