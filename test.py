@@ -19,8 +19,6 @@ skip = [
     "test\\benchmark",
     "test\\scanning",
     "test\\expressions",
-    # control flow
-    "test\\for",
     # functions
     "test\\call",
     "test\\closure",
