@@ -9,6 +9,7 @@ edition = "2018"
 [features]
 trace = []
 dump = []
+lox_errors = []
 
 [dependencies]
 num_enum = "0.5.1"

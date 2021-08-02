@@ -50,8 +50,8 @@ pub enum TokenType {
 impl TokenType {
     pub fn error_message(t: TokenType) -> Option<&'static str> {
         match t {
-            Self::UnexpectedCharacterError => Some("unexpected character"),
-            Self::UnterminatedStringError => Some("unterminated string"),
+            Self::UnexpectedCharacterError => Some("Unexpected character."),
+            Self::UnterminatedStringError => Some("Unterminated string."),
             _ => None,
         }
     }

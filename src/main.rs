@@ -238,11 +238,28 @@ impl fmt::Display for RuntimeError {
             RuntimeError::UnknownOpcode => write!(f, "Unknown opcode."),
             RuntimeError::EndOfChunk => write!(f, "Unexpected end of chunk."),
             RuntimeError::StackUnderflow => write!(f, "Stack underflow."),
-            RuntimeError::TypeError(t, v) => write!(f, "Expected a {} value but found: {}.", t, v),
-            RuntimeError::InvalidAddition(v1, v2) => {
-                write!(f, "Invalid types for + operator: {}, {}.", v1, v2)
+            RuntimeError::TypeError(t, v) => {
+                #[cfg(not(feature = "lox_errors"))]
+                {
+                    return write!(f, "Expected a {} value but found: {}.", t, v);
+                }
+                #[cfg(feature = "lox_errors")]
+                {
+                    return write!(f, "Operands must be {}s.", t);
+                }
             }
-            RuntimeError::UndefinedVariable(name) => write!(f, "Undefined variable: {}.", name),
+
+            RuntimeError::InvalidAddition(v1, v2) => {
+                #[cfg(not(feature = "lox_errors"))]
+                {
+                    return write!(f, "Invalid types for + operator: {}, {}.", v1, v2);
+                }
+                #[cfg(feature = "lox_errors")]
+                {
+                    return write!(f, "Operands must be two numbers or two strings.");
+                }
+            }
+            RuntimeError::UndefinedVariable(name) => write!(f, "Undefined variable '{}'.", name),
         }
     }
 }

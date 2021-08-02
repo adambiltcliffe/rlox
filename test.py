@@ -22,7 +22,7 @@ skip = [
     # control flow
     "test\\block\\empty.lox",
     "test\\for",
-    "test\\if",
+    # "test\\if",
     "test\\limit\\loop_too_large.lox",
     "test\\logical_operator",
     "test\\variable\\unreached_undefined.lox",
