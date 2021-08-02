@@ -237,6 +237,19 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.patch_jump(else_jump);
     }
 
+    pub fn while_statement(&mut self) {
+        let loop_start = self.get_current_chunk().code.len();
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop.into());
+        self.statement();
+        self.emit_loop(loop_start);
+        self.patch_jump(exit_jump);
+        self.emit_byte(OpCode::Pop.into());
+    }
+
     pub fn declaration(&mut self) {
         if self.match_token(TokenType::Var) {
             self.var_declaration();
@@ -292,6 +305,8 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
             self.print_statement();
         } else if self.match_token(TokenType::If) {
             self.if_statement();
+        } else if self.match_token(TokenType::While) {
+            self.while_statement();
         } else if self.match_token(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -352,6 +367,17 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         } else {
             code[offset] = ((jump >> 8) & 0xff) as u8;
             code[offset + 1] = (jump & 0xff) as u8;
+        }
+    }
+
+    pub fn emit_loop(&mut self, loop_start: usize) {
+        self.emit_byte(OpCode::Loop.into());
+        let jump = self.get_current_chunk().code.len() - loop_start + 2;
+        if jump > u16::MAX as usize {
+            self.short_error(CompileError::TooFarToLoop)
+        } else {
+            self.emit_byte(((jump >> 8) & 0xff) as u8);
+            self.emit_byte((jump & 0xff) as u8);
         }
     }
 

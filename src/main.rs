@@ -32,6 +32,7 @@ pub enum OpCode {
     Print,
     Jump,
     JumpIfFalse,
+    Loop,
     Pop,
     GetLocal,
     SetLocal,
@@ -197,6 +198,7 @@ pub enum CompileError {
     DuplicateName,
     UninitializedLocal,
     TooFarToJump,
+    TooFarToLoop,
 }
 
 #[derive(Debug, Clone)]
@@ -228,6 +230,7 @@ impl fmt::Display for CompileError {
                 write!(f, "Can't read local variable in its own initializer.")
             }
             CompileError::TooFarToJump => write!(f, "Too much code to jump over."),
+            CompileError::TooFarToLoop => write!(f, "Loop body too large."),
         }
     }
 }
@@ -415,6 +418,10 @@ impl VM {
                         if self.peek_stack(0).is_falsey() {
                             ip.offset += offset;
                         }
+                    }
+                    OpCode::Loop => {
+                        let offset = ip.read_short() as usize;
+                        ip.offset -= offset;
                     }
                     OpCode::Pop => {
                         self.pop_stack()?;

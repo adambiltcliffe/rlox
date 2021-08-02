@@ -21,8 +21,6 @@ skip = [
     "test\\expressions",
     # control flow
     "test\\for",
-    "test\\limit\\loop_too_large.lox",
-    "test\\while",
     # functions
     "test\\call",
     "test\\closure",

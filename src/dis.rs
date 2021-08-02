@@ -27,6 +27,7 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
             OpCode::Print => simple_instruction("PRINT"),
             OpCode::Jump => jump_instruction("JUMP", ip, 1),
             OpCode::JumpIfFalse => jump_instruction("JUMP_IF_FALSE", ip, 1),
+            OpCode::Loop => jump_instruction("LOOP", ip, -1),
             OpCode::Pop => simple_instruction("POP"),
             OpCode::GetLocal => byte_instruction("GET_LOCAL", ip),
             OpCode::SetLocal => byte_instruction("SET_LOCAL", ip),
@@ -50,13 +51,13 @@ fn byte_instruction(name: &str, ip: &mut TracingIP) {
     println!("{:<16} {:<4}", name, byte);
 }
 
-fn jump_instruction(name: &str, ip: &mut TracingIP, sign: usize) {
-    let offset = ip.read_short() as usize;
+fn jump_instruction(name: &str, ip: &mut TracingIP, sign: isize) {
+    let offset = ip.read_short() as isize;
     println!(
         "{:<16} {:<4} -> {:<4}",
         name,
         offset,
-        ip.offset + offset * sign
+        ip.offset as isize + offset * sign
     );
 }
 
