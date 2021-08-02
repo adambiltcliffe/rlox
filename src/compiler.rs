@@ -1,6 +1,6 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::{HeapEntry, Value};
+use crate::value::{create_string, Value};
 use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 use std::convert::TryInto;
@@ -135,7 +135,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     pub fn previous_identifier(&mut self) -> Value {
         let name = &self.previous.as_ref().unwrap().content.unwrap();
         let vm = &mut self.vm;
-        HeapEntry::create_string(vm, name).into()
+        create_string(vm, name).into()
     }
 
     pub fn identifier_constant(&mut self, name: Value) -> Result<u8, CompileError> {

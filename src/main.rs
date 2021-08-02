@@ -5,7 +5,7 @@ use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
-use value::{HeapEntry, InternedString, ObjectRoot, Value, ValueType};
+use value::{create_string, InternedString, Trace, Value};
 
 mod compiler;
 mod dis;
@@ -206,7 +206,7 @@ pub enum RuntimeError {
     UnknownOpcode,
     EndOfChunk,
     StackUnderflow,
-    TypeError(ValueType, String),
+    TypeError(&'static str, String),
     InvalidAddition(String, String),
     UndefinedVariable(String),
 }
@@ -272,7 +272,7 @@ type InterpretResult = Result<(), VMError>;
 
 pub struct VM {
     stack: Vec<Value>,
-    objects: Vec<ObjectRoot>,
+    objects: Vec<Box<dyn Trace>>,
     strings: HashSet<value::InternedString>,
     globals: HashMap<value::InternedString, Value>,
 }
@@ -379,16 +379,12 @@ impl VM {
                     OpCode::Add => {
                         let a = self.pop_stack()?;
                         let b = self.pop_stack()?;
-                        match (a.get_type(), b.get_type()) {
-                            (ValueType::Number, ValueType::Number) => {
-                                let a: f64 = a.try_into()?;
-                                let b: f64 = b.try_into()?;
-                                self.stack.push((a + b).into())
-                            }
-                            (ValueType::String, ValueType::String) => {
-                                let a: String = a.try_into()?;
-                                let b: String = b.try_into()?;
-                                let w = HeapEntry::create_string(self, &(b + &a));
+                        match (&a, &b) {
+                            (Value::Number(a), Value::Number(b)) => self.stack.push((a + b).into()),
+                            (Value::String(a), Value::String(b)) => {
+                                let a = &a.upgrade().unwrap().content;
+                                let b = &b.upgrade().unwrap().content;
+                                let w = create_string(self, &format!("{}{}", b, a));
                                 self.stack.push(w.into())
                             }
                             _ => {

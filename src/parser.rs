@@ -1,6 +1,6 @@
 use crate::compiler::Compiler;
 use crate::scanner::TokenType;
-use crate::value::HeapEntry;
+use crate::value::create_string;
 use crate::OpCode;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
@@ -189,7 +189,7 @@ fn string(c: &mut Compiler, _can_assign: bool) {
     let vm = &mut c.vm;
     let prev = &c.previous;
     let content = prev.as_ref().unwrap().content.unwrap();
-    let w = HeapEntry::create_string(vm, &content[1..content.len() - 1]);
+    let w = create_string(vm, &content[1..content.len() - 1]);
     c.emit_constant(w.into());
 }
 
