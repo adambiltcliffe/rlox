@@ -5,7 +5,7 @@ use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
-use value::{create_string, InternedString, Trace, Value};
+use value::{create_string, Function, InternedString, Trace, Value};
 
 mod compiler;
 mod dis;
@@ -266,7 +266,7 @@ impl fmt::Display for RuntimeError {
     }
 }
 
-type CompilerResult = Result<Chunk, CompileError>;
+type CompilerResult = Result<Function, CompileError>;
 type ValueResult = Result<Value, VMError>;
 type InterpretResult = Result<(), VMError>;
 
@@ -288,8 +288,8 @@ impl VM {
     }
 
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
-        let chunk = compiler::compile(source, self).map_err(VMError::CompileError)?;
-        let mut ip = IP::new(&chunk, 0);
+        let func = compiler::compile(source, self).map_err(VMError::CompileError)?;
+        let mut ip = IP::new(&func.chunk, 0);
         let result = self.run(&mut ip);
         if let Err(VMError::RuntimeError(ref e)) = result {
             if let Some(n) = ip.get_line() {

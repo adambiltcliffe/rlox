@@ -1,4 +1,4 @@
-use crate::{RuntimeError, VMError, VM};
+use crate::{Chunk, RuntimeError, VMError, VM};
 use std::convert::TryFrom;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -13,6 +13,7 @@ pub enum Value {
     Nil,
     Number(f64),
     String(ObjectRef<String>),
+    Function(ObjectRef<Function>),
 }
 
 impl Value {
@@ -91,6 +92,7 @@ impl fmt::Display for Value {
             Self::Nil => write!(f, "nil"),
             Self::Number(n) => write!(f, "{}", n),
             Self::String(obj) => write!(f, "{}", format_string(obj)),
+            Self::Function(obj) => write!(f, "{}", format_function(obj)),
         }
     }
 }
@@ -133,6 +135,17 @@ pub fn create_string(vm: &mut VM, s: &str) -> ObjectRef<String> {
 pub fn format_string(w: &ObjectRef<String>) -> String {
     let c = &w.upgrade().unwrap().content;
     format!("\"{}\"", c).to_owned()
+}
+
+pub fn format_function(w: &ObjectRef<Function>) -> String {
+    format_function_name(&w.upgrade().unwrap().content)
+}
+
+pub fn format_function_name(f: &Function) -> String {
+    match &f.name {
+        None => "<script>".to_owned(),
+        Some(obj) => format!("<fn {}>", obj.upgrade().unwrap().content).to_owned(),
+    }
 }
 
 pub fn printable_value(v: Value) -> String {
@@ -181,6 +194,28 @@ impl TryFrom<Value> for InternedString {
 impl fmt::Display for InternedString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0.content)
+    }
+}
+
+pub enum FunctionType {
+    Function,
+    Script,
+}
+
+pub struct Function {
+    pub name: Option<ObjectRef<String>>,
+    pub arity: usize,
+    pub chunk: Chunk,
+}
+
+impl Function {
+    pub fn new_in_vm(vm: &mut VM, name: Option<&str>, arity: usize) -> Self {
+        let name = name.map(|s| create_string(vm, s));
+        Self {
+            name,
+            arity,
+            chunk: Chunk::new(),
+        }
     }
 }
 

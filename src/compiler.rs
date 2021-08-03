@@ -1,6 +1,6 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::{create_string, Value};
+use crate::value::{create_string, format_function_name, Function, FunctionType, Value};
 use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 use std::convert::TryInto;
@@ -27,7 +27,8 @@ pub struct Compiler<'src, 'vm> {
     pub current: Option<Token<'src>>,
     first_error: Option<CompileError>,
     panic_mode: bool,
-    chunk: Chunk,
+    function: Function,
+    function_type: FunctionType,
     locals: Vec<Local<'src>>,
     local_count: usize,
     scope_depth: usize,
@@ -35,6 +36,12 @@ pub struct Compiler<'src, 'vm> {
 
 impl<'src, 'vm> Compiler<'src, 'vm> {
     fn new(scanner: Scanner<'src>, vm: &'vm mut VM) -> Self {
+        let function = Function::new_in_vm(vm, None, 0);
+        let mut locals = Vec::new();
+        locals.push(Local {
+            name: "",
+            depth: Some(0),
+        });
         Self {
             scanner,
             vm,
@@ -42,8 +49,9 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
             previous: None,
             first_error: None,
             panic_mode: false,
-            chunk: Chunk::new(),
-            locals: Vec::new(),
+            function,
+            function_type: FunctionType::Script,
+            locals,
             local_count: 0,
             scope_depth: 0,
         }
@@ -377,7 +385,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     fn get_current_chunk(&mut self) -> &mut Chunk {
-        return &mut self.chunk;
+        return &mut self.function.chunk;
     }
 
     pub fn emit_byte(&mut self, byte: u8) {
@@ -437,7 +445,8 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         #[cfg(feature = "dump")]
         {
             if let None = self.first_error {
-                crate::dis::disassemble_chunk(&self.chunk, "code")
+                let s = format_function_name(&self.function);
+                crate::dis::disassemble_chunk(&self.get_current_chunk(), &s)
             }
         }
     }
@@ -454,6 +463,6 @@ pub(crate) fn compile(source: &str, vm: &mut VM) -> CompilerResult {
     compiler.end();
     match compiler.first_error {
         Some(e) => Err(e),
-        None => Ok(compiler.chunk),
+        None => Ok(compiler.function),
     }
 }
