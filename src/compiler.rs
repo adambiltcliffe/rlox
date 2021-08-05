@@ -1,6 +1,6 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::{create_string, format_function_name, Function, FunctionType, Value};
+use crate::value::{create_string, format_function_name, manage, Function, FunctionType, Value};
 use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 use std::convert::TryInto;
@@ -215,8 +215,16 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         if self.cc.scope_depth == 0 {
             self.emit_bytes(OpCode::DefineGlobal.into(), global.unwrap());
         } else {
-            self.cc.locals.last_mut().unwrap().depth = Some(self.cc.scope_depth);
+            // mark initialized, it's already sitting on the stack in the right place
+            self.mark_initialized();
         }
+    }
+
+    fn mark_initialized(&mut self) {
+        if self.cc.scope_depth == 0 {
+            return;
+        };
+        self.cc.locals.last_mut().unwrap().depth = Some(self.cc.scope_depth);
     }
 
     pub fn block(&mut self) {
@@ -224,6 +232,18 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
             self.declaration();
         }
         self.consume(TokenType::RightBrace, "Expect '}' after block.");
+    }
+
+    pub fn function(&mut self, function_type: FunctionType) {
+        self.begin_cc(function_type);
+        self.begin_scope();
+        self.consume(TokenType::LeftParen, "Expect '(' after function name.");
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.");
+        self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
+        self.block();
+        let func = self.end_cc();
+        let val = Value::Function(manage(self.vm, func));
+        self.emit_constant(val);
     }
 
     pub fn expression(&mut self) {
@@ -308,13 +328,26 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     pub fn declaration(&mut self) {
-        if self.match_token(TokenType::Var) {
+        if self.match_token(TokenType::Fun) {
+            self.fun_declaration();
+        } else if self.match_token(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
         }
         if self.panic_mode {
             self.synchronize();
+        }
+    }
+
+    pub fn fun_declaration(&mut self) {
+        match self.parse_variable("Expect variable name.") {
+            Err(e) => self.error(&format!("{}", e), e),
+            Ok(global) => {
+                self.mark_initialized();
+                self.function(FunctionType::Function);
+                self.define_variable(global);
+            }
         }
     }
 
@@ -453,7 +486,17 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         }
     }
 
-    fn end(&mut self) {
+    fn begin_cc(&mut self, function_type: FunctionType) {
+        let new_cc = ChunkCompiler::new(self.vm, function_type);
+        let old_cc = std::mem::replace(&mut self.cc, new_cc);
+        self.cc.enclosing = Some(Box::new(old_cc));
+
+        let name = self.previous.as_ref().unwrap().content.unwrap().to_owned();
+        self.cc.function.name = Some(create_string(self.vm, &name));
+    }
+
+    fn end_cc(&mut self) -> Function {
+        // This is inconsistent with end() regarding how it handles errors
         self.emit_byte(OpCode::Return.into());
         #[cfg(feature = "dump")]
         {
@@ -461,6 +504,24 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
                 let s = format_function_name(&self.cc.function);
                 crate::dis::disassemble_chunk(&self.get_current_chunk(), &s)
             }
+        }
+        let new_cc = *self.cc.enclosing.take().unwrap();
+        let old_cc = std::mem::replace(&mut self.cc, new_cc);
+        old_cc.function
+    }
+
+    fn end(mut self) -> CompilerResult {
+        self.emit_byte(OpCode::Return.into());
+        #[cfg(feature = "dump")]
+        {
+            if let None = self.first_error {
+                let s = format_function_name(&self.cc.function);
+                crate::dis::disassemble_chunk(&self.get_current_chunk(), &s)
+            }
+        }
+        match self.first_error {
+            Some(e) => Err(e),
+            None => Ok(self.cc.function),
         }
     }
 }
@@ -473,9 +534,5 @@ pub(crate) fn compile(source: &str, vm: &mut VM) -> CompilerResult {
         compiler.declaration();
     }
     compiler.consume(TokenType::EOF, "Expect end of expression.");
-    compiler.end();
-    match compiler.first_error {
-        Some(e) => Err(e),
-        None => Ok(compiler.cc.function),
-    }
+    compiler.end()
 }
