@@ -5,7 +5,7 @@ use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
-use value::{create_string, manage, Function, InternedString, Trace, Value};
+use value::{create_string, manage, Function, InternedString, ObjectRoot, Trace, Value};
 
 mod compiler;
 mod dis;
@@ -190,6 +190,12 @@ impl<'a> IP<'a> {
     }
 }
 
+pub struct CallFrame {
+    function: ObjectRoot<Function>,
+    ip_offset: usize,
+    base: usize,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum CompileError {
     ParseError,
@@ -275,6 +281,7 @@ pub struct VM {
     objects: Vec<Box<dyn Trace>>,
     strings: HashSet<value::InternedString>,
     globals: HashMap<value::InternedString, Value>,
+    frames: Vec<CallFrame>,
 }
 
 impl VM {
@@ -284,6 +291,7 @@ impl VM {
             objects: Vec::new(),
             strings: HashSet::new(),
             globals: HashMap::new(),
+            frames: Vec::new(),
         }
     }
 
@@ -293,6 +301,12 @@ impl VM {
         let oroot = oref.upgrade().unwrap();
         self.stack.push(Value::Function(oref));
         let mut ip = IP::new(&oroot.content.chunk, 0);
+        let frame = CallFrame {
+            function: oroot.clone(),
+            ip_offset: 0,
+            base: 0,
+        };
+        self.frames.push(frame);
         let result = self.run(&mut ip);
         if let Err(VMError::RuntimeError(ref e)) = result {
             if let Some(n) = ip.get_line() {
@@ -427,11 +441,14 @@ impl VM {
                     }
                     OpCode::GetLocal => {
                         let slot = ip.read();
-                        self.stack.push(self.stack[slot as usize].clone());
+                        let frame = self.frames.last().unwrap();
+                        self.stack
+                            .push(self.stack[slot as usize + frame.base].clone());
                     }
                     OpCode::SetLocal => {
                         let slot = ip.read();
-                        self.stack[slot as usize] = self.peek_stack(0).clone();
+                        let frame = self.frames.last().unwrap();
+                        self.stack[slot as usize + frame.base] = self.peek_stack(0).clone();
                     }
                     OpCode::GetGlobal => {
                         let val = ip.read_constant();
