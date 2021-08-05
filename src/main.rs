@@ -102,13 +102,17 @@ impl<'a> TracingIP<'a> {
 
     fn advance(&mut self) {
         let old_line = self.line;
-        self.line = match self.new_lines.peek() {
-            Some(&&(offs, l)) if offs == self.offset => {
-                self.new_lines.next();
-                Some(l)
-            }
-            _ => self.line,
-        };
+        loop {
+            match self.new_lines.peek() {
+                Some(&&(offs, _)) if offs < self.offset => self.new_lines.next(),
+                Some(&&(offs, l)) if offs == self.offset => {
+                    self.line = Some(l);
+                    self.new_lines.next();
+                    break;
+                }
+                _ => break,
+            };
+        }
         self.is_line_start = self.line != old_line;
     }
 
@@ -181,7 +185,7 @@ impl<'a> IP<'a> {
     fn get_line(&self) -> Option<LineNo> {
         let mut line: Option<LineNo> = None;
         for &(offs, n) in self.chunk.lines.iter() {
-            if offs >= self.offset {
+            if offs > self.offset {
                 break;
             }
             line = Some(n)
@@ -300,15 +304,16 @@ impl VM {
         let oref = manage(self, func);
         let oroot = oref.upgrade().unwrap();
         self.stack.push(Value::Function(oref));
-        let mut ip = IP::new(&oroot.content.chunk, 0);
         let frame = CallFrame {
-            function: oroot.clone(),
+            function: oroot,
             ip_offset: 0,
             base: 0,
         };
         self.frames.push(frame);
-        let result = self.run(&mut ip);
+        let result = self.run();
         if let Err(VMError::RuntimeError(ref e)) = result {
+            let frame = self.frames.last().unwrap();
+            let ip = IP::new(&frame.function.content.chunk, frame.ip_offset);
             if let Some(n) = ip.get_line() {
                 eprint!("[line {}] ", n);
             } else {
@@ -331,7 +336,7 @@ impl VM {
         }
     }
 
-    fn run(&mut self, ip: &mut IP) -> InterpretResult {
+    fn run(&mut self) -> InterpretResult {
         macro_rules! binary_op {
             ($op:tt) => {{
                 let b: f64 = self.pop_stack()?.try_into()?;
@@ -344,6 +349,9 @@ impl VM {
         {
             println!("Execution trace:")
         }
+
+        let func_root = self.frames.last().unwrap().function.clone();
+        let mut ip = IP::new(&func_root.content.chunk, 0);
 
         loop {
             // Performance-wise, we may want to delete this eventually
@@ -481,6 +489,7 @@ impl VM {
                 },
                 Err(_) => return rt(RuntimeError::UnknownOpcode),
             }
+            self.frames.last_mut().unwrap().ip_offset = ip.offset;
         }
     }
 }
