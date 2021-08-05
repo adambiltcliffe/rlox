@@ -27,15 +27,19 @@ pub struct Compiler<'src, 'vm> {
     pub current: Option<Token<'src>>,
     first_error: Option<CompileError>,
     panic_mode: bool,
+    cc: ChunkCompiler<'src>,
+}
+
+pub struct ChunkCompiler<'src> {
     function: Function,
     function_type: FunctionType,
     locals: Vec<Local<'src>>,
-    local_count: usize,
     scope_depth: usize,
+    enclosing: Option<Box<ChunkCompiler<'src>>>,
 }
 
-impl<'src, 'vm> Compiler<'src, 'vm> {
-    fn new(scanner: Scanner<'src>, vm: &'vm mut VM) -> Self {
+impl<'src> ChunkCompiler<'src> {
+    pub fn new(vm: &mut VM, function_type: FunctionType) -> Self {
         let function = Function::new_in_vm(vm, None, 0);
         let mut locals = Vec::new();
         locals.push(Local {
@@ -43,31 +47,40 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
             depth: Some(0),
         });
         Self {
+            function,
+            function_type,
+            locals,
+            scope_depth: 0,
+            enclosing: None,
+        }
+    }
+}
+
+impl<'src, 'vm> Compiler<'src, 'vm> {
+    fn new(scanner: Scanner<'src>, vm: &'vm mut VM) -> Self {
+        let cc = ChunkCompiler::new(vm, FunctionType::Script);
+        Self {
             scanner,
             vm,
             current: None,
             previous: None,
             first_error: None,
             panic_mode: false,
-            function,
-            function_type: FunctionType::Script,
-            locals,
-            local_count: 0,
-            scope_depth: 0,
+            cc,
         }
     }
 
     fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+        self.cc.scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.scope_depth -= 1;
-        while !self.locals.is_empty()
-            && self.locals.last().unwrap().depth.unwrap() > self.scope_depth
+        self.cc.scope_depth -= 1;
+        while !self.cc.locals.is_empty()
+            && self.cc.locals.last().unwrap().depth.unwrap() > self.cc.scope_depth
         {
             self.emit_byte(OpCode::Pop.into());
-            self.locals.pop();
+            self.cc.locals.pop();
         }
     }
 
@@ -133,7 +146,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     pub fn parse_variable(&mut self, message: &str) -> Result<Option<u8>, CompileError> {
         self.consume(TokenType::Identifier, message);
         self.declare_variable();
-        if self.scope_depth > 0 {
+        if self.cc.scope_depth > 0 {
             return Ok(None);
         }
         let v = self.previous_identifier();
@@ -151,14 +164,14 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     pub fn declare_variable(&mut self) {
-        if self.scope_depth == 0 {
+        if self.cc.scope_depth == 0 {
             return;
         }
         let name = self.previous.as_ref().unwrap().content.unwrap();
         let mut is_duplicate = false;
-        for local in self.locals.iter().rev() {
+        for local in self.cc.locals.iter().rev() {
             if let Some(d) = local.depth {
-                if d < self.scope_depth {
+                if d < self.cc.scope_depth {
                     break;
                 }
             }
@@ -175,7 +188,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     pub fn add_local(&mut self, name: &'src str) {
-        if self.local_count == u8::MAX as usize + 1 {
+        if self.cc.locals.len() == u8::MAX as usize + 1 {
             self.short_error(CompileError::TooManyLocals);
             return;
         }
@@ -183,11 +196,11 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
             name: name,
             depth: None,
         };
-        self.locals.push(local);
+        self.cc.locals.push(local);
     }
 
     pub fn resolve_local(&mut self, name: &str) -> Option<u8> {
-        for (i, local) in self.locals.iter().enumerate().rev() {
+        for (i, local) in self.cc.locals.iter().enumerate().rev() {
             if local.name == name {
                 if local.depth.is_none() {
                     self.short_error(CompileError::UninitializedLocal)
@@ -199,10 +212,10 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     pub fn define_variable(&mut self, global: Option<u8>) {
-        if self.scope_depth == 0 {
+        if self.cc.scope_depth == 0 {
             self.emit_bytes(OpCode::DefineGlobal.into(), global.unwrap());
         } else {
-            self.locals.last_mut().unwrap().depth = Some(self.scope_depth);
+            self.cc.locals.last_mut().unwrap().depth = Some(self.cc.scope_depth);
         }
     }
 
@@ -385,7 +398,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     fn get_current_chunk(&mut self) -> &mut Chunk {
-        return &mut self.function.chunk;
+        return &mut self.cc.function.chunk;
     }
 
     pub fn emit_byte(&mut self, byte: u8) {
@@ -445,7 +458,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         #[cfg(feature = "dump")]
         {
             if let None = self.first_error {
-                let s = format_function_name(&self.function);
+                let s = format_function_name(&self.cc.function);
                 crate::dis::disassemble_chunk(&self.get_current_chunk(), &s)
             }
         }
@@ -463,6 +476,6 @@ pub(crate) fn compile(source: &str, vm: &mut VM) -> CompilerResult {
     compiler.end();
     match compiler.first_error {
         Some(e) => Err(e),
-        None => Ok(compiler.function),
+        None => Ok(compiler.cc.function),
     }
 }

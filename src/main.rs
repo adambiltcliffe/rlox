@@ -5,7 +5,7 @@ use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
-use value::{create_string, Function, InternedString, Trace, Value};
+use value::{create_string, manage, Function, InternedString, Trace, Value};
 
 mod compiler;
 mod dis;
@@ -289,7 +289,10 @@ impl VM {
 
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
         let func = compiler::compile(source, self).map_err(VMError::CompileError)?;
-        let mut ip = IP::new(&func.chunk, 0);
+        let oref = manage(self, func);
+        let oroot = oref.upgrade().unwrap();
+        self.stack.push(Value::Function(oref));
+        let mut ip = IP::new(&oroot.content.chunk, 0);
         let result = self.run(&mut ip);
         if let Err(VMError::RuntimeError(ref e)) = result {
             if let Some(n) = ip.get_line() {

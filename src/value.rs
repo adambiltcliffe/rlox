@@ -2,10 +2,10 @@ use crate::{Chunk, RuntimeError, VMError, VM};
 use std::convert::TryFrom;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::rc;
+use std::rc::{Rc, Weak};
 
-pub type ObjectRoot<T> = rc::Rc<HeapEntry<T>>;
-pub type ObjectRef<T> = rc::Weak<HeapEntry<T>>;
+pub type ObjectRoot<T> = Rc<HeapEntry<T>>;
+pub type ObjectRef<T> = Weak<HeapEntry<T>>;
 
 #[derive(Clone)]
 pub enum Value {
@@ -40,7 +40,7 @@ impl From<f64> for Value {
 }
 
 impl From<ObjectRef<String>> for Value {
-    fn from(w: rc::Weak<HeapEntry<String>>) -> Self {
+    fn from(w: Weak<HeapEntry<String>>) -> Self {
         Value::String(w)
     }
 }
@@ -104,7 +104,7 @@ impl PartialEq for Value {
             (Value::Nil, Value::Nil) => true,
             (Value::Number(a), Value::Number(b)) => (a == b),
             // Value equality is pointer equality for interned strings
-            (Value::String(a), Value::String(b)) => rc::Weak::ptr_eq(a, b),
+            (Value::String(a), Value::String(b)) => Weak::ptr_eq(a, b),
             _ => false,
         }
     }
@@ -114,8 +114,15 @@ pub struct HeapEntry<T> {
     pub content: T,
 }
 
+pub fn manage<T: 'static>(vm: &mut VM, value: T) -> ObjectRef<T> {
+    let entry = HeapEntry::<T> { content: value };
+    let oroot = Rc::new(entry);
+    let oref = Rc::downgrade(&oroot);
+    vm.objects.push(Box::new(oroot));
+    oref
+}
+
 pub fn create_string(vm: &mut VM, s: &str) -> ObjectRef<String> {
-    use rc::Rc;
     match vm.strings.get(s) {
         Some(InternedString(oroot)) => Rc::downgrade(oroot),
         None => {
