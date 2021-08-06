@@ -43,7 +43,8 @@ pub fn get_rule(ttype: TokenType) -> ParseRule {
     match ttype {
         TokenType::LeftParen => ParseRule {
             prefix: Some(grouping),
-            ..ParseRule::default()
+            infix: Some(call),
+            precedence: Precedence::Call,
         },
         TokenType::Minus => ParseRule {
             prefix: Some(unary),
@@ -171,6 +172,11 @@ fn binary(c: &mut Compiler, _can_assign: bool) {
         TokenType::Slash => c.emit_byte(OpCode::Divide.into()),
         _ => unreachable!(),
     }
+}
+
+fn call(c: &mut Compiler, _can_assign: bool) {
+    let arg_count = c.argument_list();
+    c.emit_bytes(OpCode::Call.into(), arg_count as u8);
 }
 
 fn number(c: &mut Compiler, _can_assign: bool) {

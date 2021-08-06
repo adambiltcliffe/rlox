@@ -227,6 +227,24 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.cc.locals.last_mut().unwrap().depth = Some(self.cc.scope_depth);
     }
 
+    pub fn argument_list(&mut self) -> usize {
+        let mut arg_count: usize = 0;
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.expression();
+                if arg_count == 255 {
+                    self.short_error(CompileError::TooManyArguments);
+                }
+                arg_count += 1;
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after arguments.");
+        arg_count
+    }
+
     pub fn block(&mut self) {
         while !self.check(TokenType::RightBrace) && !self.check(TokenType::EOF) {
             self.declaration();
@@ -238,6 +256,26 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.begin_cc(function_type);
         self.begin_scope();
         self.consume(TokenType::LeftParen, "Expect '(' after function name.");
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.cc.function.arity += 1;
+                if self.cc.function.arity > 255 {
+                    self.short_error_at_current(CompileError::TooManyParameters);
+                }
+                match self.parse_variable("Expect parameter name.") {
+                    Err(e) => {
+                        self.error(&format!("{}", e), e);
+                        break;
+                    }
+                    Ok(constant) => {
+                        self.define_variable(constant);
+                    }
+                }
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
         self.consume(TokenType::RightParen, "Expect ')' after parameters.");
         self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
         self.block();
@@ -415,6 +453,10 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         report_error(message, self.current.as_ref().unwrap());
         self.first_error = self.first_error.or(Some(ce));
         self.panic_mode = true
+    }
+
+    pub(crate) fn short_error_at_current(&mut self, ce: CompileError) {
+        self.error_at_current(&ce.to_string(), ce);
     }
 
     pub(crate) fn error(&mut self, message: &str, ce: CompileError) {

@@ -33,6 +33,7 @@ pub enum OpCode {
     Jump,
     JumpIfFalse,
     Loop,
+    Call,
     Pop,
     GetLocal,
     SetLocal,
@@ -209,6 +210,8 @@ pub enum CompileError {
     UninitializedLocal,
     TooFarToJump,
     TooFarToLoop,
+    TooManyParameters,
+    TooManyArguments,
 }
 
 #[derive(Debug, Clone)]
@@ -216,9 +219,12 @@ pub enum RuntimeError {
     UnknownOpcode,
     EndOfChunk,
     StackUnderflow,
+    StackOverflow,
     TypeError(&'static str, String),
     InvalidAddition(String, String),
     UndefinedVariable(String),
+    NotCallable,
+    WrongArity(usize, usize),
 }
 
 #[derive(Debug, Clone)]
@@ -241,6 +247,8 @@ impl fmt::Display for CompileError {
             }
             CompileError::TooFarToJump => write!(f, "Too much code to jump over."),
             CompileError::TooFarToLoop => write!(f, "Loop body too large."),
+            CompileError::TooManyParameters => write!(f, "Can't have more than 255 parameters."),
+            CompileError::TooManyArguments => write!(f, "Can't have more than 255 arguments."),
         }
     }
 }
@@ -251,6 +259,7 @@ impl fmt::Display for RuntimeError {
             RuntimeError::UnknownOpcode => write!(f, "Unknown opcode."),
             RuntimeError::EndOfChunk => write!(f, "Unexpected end of chunk."),
             RuntimeError::StackUnderflow => write!(f, "Stack underflow."),
+            RuntimeError::StackOverflow => write!(f, "Stack overflow."),
             RuntimeError::TypeError(t, v) => {
                 #[cfg(not(feature = "lox_errors"))]
                 {
@@ -272,6 +281,10 @@ impl fmt::Display for RuntimeError {
                 }
             }
             RuntimeError::UndefinedVariable(name) => write!(f, "Undefined variable '{}'.", name),
+            RuntimeError::NotCallable => write!(f, "Can only call functions and classes."),
+            RuntimeError::WrongArity(expect, actual) => {
+                write!(f, "Expected {} arguments but got {}.", expect, actual)
+            }
         }
     }
 }
@@ -304,22 +317,22 @@ impl VM {
         let oref = manage(self, func);
         let oroot = oref.upgrade().unwrap();
         self.stack.push(Value::Function(oref));
-        let frame = CallFrame {
-            function: oroot,
-            ip_offset: 0,
-            base: 0,
-        };
-        self.frames.push(frame);
+        self.call(oroot, 0)?;
         let result = self.run();
         if let Err(VMError::RuntimeError(ref e)) = result {
-            let frame = self.frames.last().unwrap();
-            let ip = IP::new(&frame.function.content.chunk, frame.ip_offset);
-            if let Some(n) = ip.get_line() {
-                eprint!("[line {}] ", n);
-            } else {
-                eprint!("[unknown line] ");
-            }
             eprintln!("Runtime error: {}", e);
+            for frame in self.frames.iter().rev() {
+                let ip = IP::new(&frame.function.content.chunk, frame.ip_offset - 1);
+                if let Some(n) = ip.get_line() {
+                    eprint!("[line {}] in ", n);
+                } else {
+                    eprint!("[unknown line] in ");
+                }
+                match &frame.function.content.name {
+                    None => eprintln!("script"),
+                    Some(oref) => eprintln!("{}()", oref.upgrade().unwrap().content),
+                }
+            }
             self.stack.clear();
         }
         result
@@ -350,7 +363,7 @@ impl VM {
             println!("Execution trace:")
         }
 
-        let func_root = self.frames.last().unwrap().function.clone();
+        let mut func_root = self.frames.last().unwrap().function.clone();
         let mut ip = IP::new(&func_root.content.chunk, 0);
 
         loop {
@@ -444,6 +457,12 @@ impl VM {
                         let offset = ip.read_short() as usize;
                         ip.offset -= offset;
                     }
+                    OpCode::Call => {
+                        let arg_count = ip.read() as usize;
+                        self.call_value(self.peek_stack(arg_count), arg_count)?;
+                        func_root = self.frames.last().unwrap().function.clone();
+                        ip = IP::new(&func_root.content.chunk, 0);
+                    }
                     OpCode::Pop => {
                         self.pop_stack()?;
                     }
@@ -491,6 +510,29 @@ impl VM {
             }
             self.frames.last_mut().unwrap().ip_offset = ip.offset;
         }
+    }
+
+    fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), VMError> {
+        match callee {
+            Value::Function(oref) => return self.call(oref.upgrade().unwrap(), arg_count),
+            _ => rt(RuntimeError::NotCallable),
+        }
+    }
+
+    fn call(&mut self, function: ObjectRoot<Function>, arg_count: usize) -> Result<(), VMError> {
+        if arg_count != function.content.arity {
+            return rt(RuntimeError::WrongArity(function.content.arity, arg_count));
+        }
+        if self.frames.len() == 64 {
+            return rt(RuntimeError::StackOverflow);
+        }
+        let frame = CallFrame {
+            function,
+            ip_offset: 0,
+            base: self.stack.len() - arg_count - 1,
+        };
+        self.frames.push(frame);
+        Ok(())
     }
 }
 
