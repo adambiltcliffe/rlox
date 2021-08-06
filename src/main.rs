@@ -212,6 +212,7 @@ pub enum CompileError {
     TooFarToLoop,
     TooManyParameters,
     TooManyArguments,
+    ReturnAtTopLevel,
 }
 
 #[derive(Debug, Clone)]
@@ -249,6 +250,7 @@ impl fmt::Display for CompileError {
             CompileError::TooFarToLoop => write!(f, "Loop body too large."),
             CompileError::TooManyParameters => write!(f, "Can't have more than 255 parameters."),
             CompileError::TooManyArguments => write!(f, "Can't have more than 255 arguments."),
+            CompileError::ReturnAtTopLevel => write!(f, "Can't return from top-level code."),
         }
     }
 }

@@ -294,6 +294,21 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.emit_byte(OpCode::Pop.into());
     }
 
+    pub fn return_statement(&mut self) {
+        match self.cc.function_type {
+            FunctionType::Function => {
+                if self.match_token(TokenType::Semicolon) {
+                    self.emit_return()
+                } else {
+                    self.expression();
+                    self.consume(TokenType::Semicolon, "Expect ';' after return value.");
+                    self.emit_byte(OpCode::Return.into());
+                }
+            }
+            FunctionType::Script => self.short_error(CompileError::ReturnAtTopLevel),
+        }
+    }
+
     pub fn print_statement(&mut self) {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after value.");
@@ -429,7 +444,9 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     pub fn statement(&mut self) {
-        if self.match_token(TokenType::Print) {
+        if self.match_token(TokenType::Return) {
+            self.return_statement();
+        } else if self.match_token(TokenType::Print) {
             self.print_statement();
         } else if self.match_token(TokenType::If) {
             self.if_statement();
