@@ -14,6 +14,7 @@ pub enum Value {
     Number(f64),
     String(ObjectRef<String>),
     Function(ObjectRef<Function>),
+    Native(ObjectRef<Native>),
 }
 
 impl Value {
@@ -93,6 +94,7 @@ impl fmt::Display for Value {
             Self::Number(n) => write!(f, "{}", n),
             Self::String(obj) => write!(f, "{}", format_string(obj)),
             Self::Function(obj) => write!(f, "{}", format_function(obj)),
+            Self::Native(_) => write!(f, "<native fn>"),
         }
     }
 }
@@ -163,7 +165,7 @@ pub fn printable_value(v: Value) -> String {
     format!("{}", v)
 }
 
-pub struct InternedString(ObjectRoot<String>);
+pub struct InternedString(pub ObjectRoot<String>);
 
 impl Hash for InternedString {
     fn hash<H: Hasher>(&self, h: &mut H) {
@@ -223,6 +225,18 @@ impl Function {
             arity,
             chunk: Chunk::new(),
         }
+    }
+}
+
+pub type NativeFn = fn(arg_count: usize, args: &[Value]) -> Value;
+
+pub struct Native {
+    pub function: NativeFn,
+}
+
+impl Native {
+    pub fn new(function: NativeFn) -> Self {
+        Self { function }
     }
 }
 

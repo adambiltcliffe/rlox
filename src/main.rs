@@ -5,7 +5,9 @@ use std::fmt;
 use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
-use value::{create_string, manage, Function, InternedString, ObjectRoot, Trace, Value};
+use value::{
+    create_string, manage, Function, InternedString, Native, NativeFn, ObjectRoot, Trace, Value,
+};
 
 mod compiler;
 mod dis;
@@ -462,9 +464,12 @@ impl VM {
                     OpCode::Call => {
                         let arg_count = ip.read() as usize;
                         self.frames.last_mut().unwrap().ip_offset = ip.offset;
+                        let old_frames = self.frames.len();
                         self.call_value(self.peek_stack(arg_count), arg_count)?;
-                        func_root = self.frames.last().unwrap().function.clone();
-                        ip = IP::new(&func_root.content.chunk, 0);
+                        if self.frames.len() > old_frames {
+                            func_root = self.frames.last().unwrap().function.clone();
+                            ip = IP::new(&func_root.content.chunk, 0);
+                        }
                     }
                     OpCode::Return => {
                         let result = self.pop_stack()?;
@@ -532,6 +537,13 @@ impl VM {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), VMError> {
         match callee {
             Value::Function(oref) => return self.call(oref.upgrade().unwrap(), arg_count),
+            Value::Native(oref) => {
+                let args: &[Value] = &self.stack[self.stack.len() - arg_count..];
+                let result = (oref.upgrade().unwrap().content.function)(arg_count, args);
+                self.stack.truncate(self.stack.len() - arg_count - 1);
+                self.stack.push(result);
+                Ok(())
+            }
             _ => rt(RuntimeError::NotCallable),
         }
     }
@@ -551,10 +563,29 @@ impl VM {
         self.frames.push(frame);
         Ok(())
     }
+
+    fn define_native(&mut self, name: &str, function: NativeFn) {
+        let interned = InternedString(create_string(self, name).upgrade().unwrap());
+        let value = Value::Native(manage::<Native>(self, Native::new(function)));
+        self.globals.insert(interned, value);
+    }
+}
+
+fn clock() -> u128 {
+    use std::time;
+    time::SystemTime::now()
+        .duration_since(time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+}
+
+fn clock_native(_arg_count: usize, _args: &[Value]) -> Value {
+    Value::Number(clock() as f64)
 }
 
 fn main() {
     let mut vm = VM::new();
+    vm.define_native("clock", clock_native);
     let args: Vec<String> = std::env::args().collect();
     let argc = args.len();
     if argc == 1 {
