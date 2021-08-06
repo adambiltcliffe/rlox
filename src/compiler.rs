@@ -486,6 +486,10 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.emit_byte(byte2);
     }
 
+    pub fn emit_return(&mut self) {
+        self.emit_bytes(OpCode::Nil.into(), OpCode::Return.into());
+    }
+
     pub fn emit_jump(&mut self, instruction: OpCode) -> usize {
         self.emit_byte(instruction.into());
         self.emit_byte(0xff_u8);
@@ -539,7 +543,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
 
     fn end_cc(&mut self) -> Function {
         // This is inconsistent with end() regarding how it handles errors
-        self.emit_byte(OpCode::Return.into());
+        self.emit_return();
         #[cfg(feature = "dump")]
         {
             if let None = self.first_error {
@@ -553,7 +557,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
     }
 
     fn end(mut self) -> CompilerResult {
-        self.emit_byte(OpCode::Return.into());
+        self.emit_return();
         #[cfg(feature = "dump")]
         {
             if let None = self.first_error {

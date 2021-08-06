@@ -459,9 +459,27 @@ impl VM {
                     }
                     OpCode::Call => {
                         let arg_count = ip.read() as usize;
+                        self.frames.last_mut().unwrap().ip_offset = ip.offset;
                         self.call_value(self.peek_stack(arg_count), arg_count)?;
                         func_root = self.frames.last().unwrap().function.clone();
                         ip = IP::new(&func_root.content.chunk, 0);
+                    }
+                    OpCode::Return => {
+                        let result = self.pop_stack()?;
+                        let top = self.frames.last().unwrap().base;
+                        self.frames.pop();
+                        match self.frames.last() {
+                            None => {
+                                self.pop_stack()?;
+                                return Ok(());
+                            }
+                            Some(frame) => {
+                                self.stack.truncate(top);
+                                self.stack.push(result);
+                                func_root = frame.function.clone();
+                                ip = IP::new(&func_root.content.chunk, frame.ip_offset);
+                            }
+                        }
                     }
                     OpCode::Pop => {
                         self.pop_stack()?;
@@ -501,9 +519,6 @@ impl VM {
                         } else {
                             return rt(RuntimeError::UndefinedVariable(val.try_into()?));
                         }
-                    }
-                    OpCode::Return => {
-                        return Ok(());
                     }
                 },
                 Err(_) => return rt(RuntimeError::UnknownOpcode),
