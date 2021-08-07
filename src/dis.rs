@@ -29,6 +29,7 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
             OpCode::JumpIfFalse => jump_instruction("JUMP_IF_FALSE", ip, 1),
             OpCode::Loop => jump_instruction("LOOP", ip, -1),
             OpCode::Call => byte_instruction("CALL", ip),
+            OpCode::Closure => constant_instruction("CLOSURE", ip), // for now
             OpCode::Pop => simple_instruction("POP"),
             OpCode::GetLocal => byte_instruction("GET_LOCAL", ip),
             OpCode::SetLocal => byte_instruction("SET_LOCAL", ip),

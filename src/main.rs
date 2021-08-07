@@ -6,7 +6,8 @@ use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
 use value::{
-    create_string, manage, Function, InternedString, Native, NativeFn, ObjectRoot, Trace, Value,
+    create_string, manage, Closure, Function, InternedString, Native, NativeFn, ObjectRoot, Trace,
+    Value,
 };
 
 mod compiler;
@@ -36,6 +37,7 @@ pub enum OpCode {
     JumpIfFalse,
     Loop,
     Call,
+    Closure,
     Pop,
     GetLocal,
     SetLocal,
@@ -198,7 +200,7 @@ impl<'a> IP<'a> {
 }
 
 pub struct CallFrame {
-    function: ObjectRoot<Function>,
+    closure: ObjectRoot<Closure>,
     ip_offset: usize,
     base: usize,
 }
@@ -319,20 +321,30 @@ impl VM {
     fn interpret_source(&mut self, source: &str) -> InterpretResult {
         let func = compiler::compile(source, self).map_err(VMError::CompileError)?;
         let oref = manage(self, func);
-        let oroot = oref.upgrade().unwrap();
-        self.stack.push(Value::Function(oref));
-        self.call(oroot, 0)?;
+        let closure_ref = manage(self, Closure::new(oref));
+        let closure_root = closure_ref.upgrade().unwrap();
+        self.stack.push(Value::Function(closure_ref));
+        self.call(closure_root, 0)?;
         let result = self.run();
         if let Err(VMError::RuntimeError(ref e)) = result {
             eprintln!("Runtime error: {}", e);
             for frame in self.frames.iter().rev() {
-                let ip = IP::new(&frame.function.content.chunk, frame.ip_offset - 1);
+                let func_root = frame.closure.content.function.upgrade().unwrap().clone();
+                let ip = IP::new(&func_root.content.chunk, frame.ip_offset - 1);
                 if let Some(n) = ip.get_line() {
                     eprint!("[line {}] in ", n);
                 } else {
                     eprint!("[unknown line] in ");
                 }
-                match &frame.function.content.name {
+                match &frame
+                    .closure
+                    .content
+                    .function
+                    .upgrade()
+                    .unwrap()
+                    .content
+                    .name
+                {
                     None => eprintln!("script"),
                     Some(oref) => eprintln!("{}()", oref.upgrade().unwrap().content),
                 }
@@ -367,7 +379,16 @@ impl VM {
             println!("Execution trace:")
         }
 
-        let mut func_root = self.frames.last().unwrap().function.clone();
+        let mut func_root = self
+            .frames
+            .last()
+            .unwrap()
+            .closure
+            .content
+            .function
+            .upgrade()
+            .unwrap()
+            .clone();
         let mut ip = IP::new(&func_root.content.chunk, 0);
 
         loop {
@@ -467,7 +488,16 @@ impl VM {
                         let old_frames = self.frames.len();
                         self.call_value(self.peek_stack(arg_count), arg_count)?;
                         if self.frames.len() > old_frames {
-                            func_root = self.frames.last().unwrap().function.clone();
+                            func_root = self
+                                .frames
+                                .last()
+                                .unwrap()
+                                .closure
+                                .content
+                                .function
+                                .upgrade()
+                                .unwrap()
+                                .clone();
                             ip = IP::new(&func_root.content.chunk, 0);
                         }
                     }
@@ -483,9 +513,17 @@ impl VM {
                             Some(frame) => {
                                 self.stack.truncate(top);
                                 self.stack.push(result);
-                                func_root = frame.function.clone();
+                                func_root =
+                                    frame.closure.content.function.upgrade().unwrap().clone();
                                 ip = IP::new(&func_root.content.chunk, frame.ip_offset);
                             }
+                        }
+                    }
+                    OpCode::Closure => {
+                        let val = ip.read_constant();
+                        if let Value::FunctionProto(function) = val {
+                            let closure = manage(self, Closure::new(function));
+                            self.stack.push(Value::Function(closure));
                         }
                     }
                     OpCode::Pop => {
@@ -548,7 +586,8 @@ impl VM {
         }
     }
 
-    fn call(&mut self, function: ObjectRoot<Function>, arg_count: usize) -> Result<(), VMError> {
+    fn call(&mut self, closure: ObjectRoot<Closure>, arg_count: usize) -> Result<(), VMError> {
+        let function = closure.content.function.upgrade().unwrap();
         if arg_count != function.content.arity {
             return rt(RuntimeError::WrongArity(function.content.arity, arg_count));
         }
@@ -556,7 +595,7 @@ impl VM {
             return rt(RuntimeError::StackOverflow);
         }
         let frame = CallFrame {
-            function,
+            closure,
             ip_offset: 0,
             base: self.stack.len() - arg_count - 1,
         };

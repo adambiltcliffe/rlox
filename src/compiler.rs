@@ -280,8 +280,13 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
         self.block();
         let func = self.end_cc();
-        let val = Value::Function(manage(self.vm, func));
-        self.emit_constant(val);
+        let value = Value::FunctionProto(manage(self.vm, func));
+        if let Ok(constant) = self.get_current_chunk().add_constant(value) {
+            self.emit_bytes(OpCode::Closure.into(), constant)
+        } else {
+            let m: &str = &format!("{}", CompileError::TooManyConstants);
+            self.error(m, CompileError::TooManyConstants)
+        }
     }
 
     pub fn expression(&mut self) {

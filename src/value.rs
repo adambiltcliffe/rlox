@@ -13,7 +13,8 @@ pub enum Value {
     Nil,
     Number(f64),
     String(ObjectRef<String>),
-    Function(ObjectRef<Function>),
+    FunctionProto(ObjectRef<Function>),
+    Function(ObjectRef<Closure>),
     Native(ObjectRef<Native>),
 }
 
@@ -93,7 +94,12 @@ impl fmt::Display for Value {
             Self::Nil => write!(f, "nil"),
             Self::Number(n) => write!(f, "{}", n),
             Self::String(obj) => write!(f, "{}", format_string(obj)),
-            Self::Function(obj) => write!(f, "{}", format_function(obj)),
+            Self::FunctionProto(obj) => write!(f, "{}", format_function(obj)),
+            Self::Function(obj) => write!(
+                f,
+                "{}",
+                format_function(&obj.upgrade().unwrap().content.function)
+            ),
             Self::Native(_) => write!(f, "<native fn>"),
         }
     }
@@ -225,6 +231,16 @@ impl Function {
             arity,
             chunk: Chunk::new(),
         }
+    }
+}
+
+pub struct Closure {
+    pub function: ObjectRef<Function>,
+}
+
+impl Closure {
+    pub fn new(function: ObjectRef<Function>) -> Self {
+        Self { function }
     }
 }
 
