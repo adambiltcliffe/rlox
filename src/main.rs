@@ -330,7 +330,9 @@ impl VM {
             eprintln!("Runtime error: {}", e);
             for frame in self.frames.iter().rev() {
                 let func_root = frame.closure.content.function.upgrade().unwrap().clone();
-                let ip = IP::new(&func_root.content.chunk, frame.ip_offset - 1);
+                // don't subtract 1 from the offset because if we hit an error, the offset
+                // probably hasn't been updated anyway
+                let ip = IP::new(&func_root.content.chunk, frame.ip_offset);
                 if let Some(n) = ip.get_line() {
                     eprint!("[line {}] in ", n);
                 } else {
