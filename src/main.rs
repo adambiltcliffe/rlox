@@ -44,6 +44,8 @@ pub enum OpCode {
     GetGlobal,
     DefineGlobal,
     SetGlobal,
+    GetUpvalue,
+    SetUpvalue,
     Return,
 }
 
@@ -216,6 +218,7 @@ pub enum CompileError {
     TooFarToLoop,
     TooManyParameters,
     TooManyArguments,
+    TooManyUpvalues,
     ReturnAtTopLevel,
 }
 
@@ -254,6 +257,7 @@ impl fmt::Display for CompileError {
             CompileError::TooFarToLoop => write!(f, "Loop body too large."),
             CompileError::TooManyParameters => write!(f, "Can't have more than 255 parameters."),
             CompileError::TooManyArguments => write!(f, "Can't have more than 255 arguments."),
+            CompileError::TooManyUpvalues => write!(f, "Too many closure variables in function."),
             CompileError::ReturnAtTopLevel => write!(f, "Can't return from top-level code."),
         }
     }
@@ -567,6 +571,8 @@ impl VM {
                             return rt(RuntimeError::UndefinedVariable(val.try_into()?));
                         }
                     }
+                    OpCode::GetUpvalue => panic!(),
+                    OpCode::SetUpvalue => panic!(),
                 },
                 Err(_) => return rt(RuntimeError::UnknownOpcode),
             }

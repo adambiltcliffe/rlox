@@ -1,4 +1,4 @@
-use crate::{Chunk, OpCode, TracingIP};
+use crate::{value::Value, Chunk, OpCode, TracingIP};
 use std::convert::TryFrom;
 
 #[allow(dead_code)]
@@ -29,13 +29,36 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
             OpCode::JumpIfFalse => jump_instruction("JUMP_IF_FALSE", ip, 1),
             OpCode::Loop => jump_instruction("LOOP", ip, -1),
             OpCode::Call => byte_instruction("CALL", ip),
-            OpCode::Closure => constant_instruction("CLOSURE", ip), // for now
+            OpCode::Closure => {
+                let constant_index = ip.read();
+                let constant = &ip.chunk.constants[constant_index as usize];
+                println!("{:<16} {:<4} {}", "CLOSURE", constant_index, constant);
+                match constant {
+                    Value::FunctionProto(f) => {
+                        for _ in 0..(f.upgrade().unwrap().content.upvalue_count) {
+                            print!("    | {:04} ", ip.offset);
+                            let is_local = ip.read();
+                            let index = ip.read();
+                            let text = match is_local {
+                                0 => "upvalue",
+                                _ => "local",
+                            };
+                            println!("|                {} {}", text, index);
+                        }
+                    }
+                    _ => {
+                        unreachable!();
+                    }
+                };
+            }
             OpCode::Pop => simple_instruction("POP"),
             OpCode::GetLocal => byte_instruction("GET_LOCAL", ip),
             OpCode::SetLocal => byte_instruction("SET_LOCAL", ip),
             OpCode::GetGlobal => constant_instruction("GET_GLOBAL", ip),
             OpCode::DefineGlobal => constant_instruction("DEFINE_GLOBAL", ip),
             OpCode::SetGlobal => constant_instruction("SET_GLOBAL", ip),
+            OpCode::GetUpvalue => byte_instruction("GET_UPVALUE", ip),
+            OpCode::SetUpvalue => byte_instruction("SET_UPVALUE", ip),
             OpCode::Return => simple_instruction("RETURN"),
         },
         Err(_) => {

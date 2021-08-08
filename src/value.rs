@@ -221,6 +221,7 @@ pub struct Function {
     pub name: Option<ObjectRef<String>>,
     pub arity: usize,
     pub chunk: Chunk,
+    pub upvalue_count: usize,
 }
 
 impl Function {
@@ -230,6 +231,7 @@ impl Function {
             name,
             arity,
             chunk: Chunk::new(),
+            upvalue_count: 0,
         }
     }
 }

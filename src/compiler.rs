@@ -20,6 +20,18 @@ pub struct Local<'src> {
     depth: Option<usize>,
 }
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum UpvalueCaptureType {
+    EnclosingLocal,
+    EnclosingUpvalue,
+}
+
+#[derive(Clone)]
+pub struct CompilerUpvalue {
+    index: usize,
+    kind: UpvalueCaptureType,
+}
+
 pub struct Compiler<'src, 'vm> {
     pub vm: &'vm mut VM,
     pub scanner: Scanner<'src>,
@@ -27,7 +39,7 @@ pub struct Compiler<'src, 'vm> {
     pub current: Option<Token<'src>>,
     first_error: Option<CompileError>,
     panic_mode: bool,
-    cc: ChunkCompiler<'src>,
+    pub cc: ChunkCompiler<'src>,
 }
 
 pub struct ChunkCompiler<'src> {
@@ -35,6 +47,7 @@ pub struct ChunkCompiler<'src> {
     function_type: FunctionType,
     locals: Vec<Local<'src>>,
     scope_depth: usize,
+    upvalues: Vec<CompilerUpvalue>,
     enclosing: Option<Box<ChunkCompiler<'src>>>,
 }
 
@@ -51,8 +64,56 @@ impl<'src> ChunkCompiler<'src> {
             function_type,
             locals,
             scope_depth: 0,
+            upvalues: Vec::new(),
             enclosing: None,
         }
+    }
+
+    pub fn resolve_local(&mut self, name: &str) -> Result<Option<u8>, CompileError> {
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name == name {
+                if local.depth.is_none() {
+                    return Err(CompileError::UninitializedLocal);
+                }
+                return Ok(Some(i.try_into().unwrap()));
+            }
+        }
+        return Ok(None);
+    }
+
+    pub fn resolve_upvalue(&mut self, name: &str) -> Result<Option<u8>, CompileError> {
+        match &mut self.enclosing {
+            None => Ok(None),
+            Some(ecc) => match ecc.resolve_local(name)? {
+                None => match ecc.resolve_upvalue(name)? {
+                    None => Ok(None),
+                    Some(upvalue) => Ok(Some(
+                        self.add_upvalue(upvalue, UpvalueCaptureType::EnclosingUpvalue)?,
+                    )),
+                },
+                Some(local) => Ok(Some(
+                    self.add_upvalue(local, UpvalueCaptureType::EnclosingLocal)?,
+                )),
+            },
+        }
+    }
+
+    pub fn add_upvalue(&mut self, index: u8, kind: UpvalueCaptureType) -> Result<u8, CompileError> {
+        for (i, uv) in self.upvalues.iter().enumerate() {
+            if uv.index as u8 == index && uv.kind == kind {
+                return Ok(i.try_into().unwrap());
+            }
+        }
+        if self.upvalues.len() == u8::MAX as usize {
+            return Err(CompileError::TooManyUpvalues);
+        }
+        let uv = CompilerUpvalue {
+            index: index as usize,
+            kind,
+        };
+        self.upvalues.push(uv);
+        self.function.upvalue_count = self.upvalues.len();
+        return Ok((self.upvalues.len() - 1).try_into().unwrap());
     }
 }
 
@@ -199,18 +260,6 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.cc.locals.push(local);
     }
 
-    pub fn resolve_local(&mut self, name: &str) -> Option<u8> {
-        for (i, local) in self.cc.locals.iter().enumerate().rev() {
-            if local.name == name {
-                if local.depth.is_none() {
-                    self.short_error(CompileError::UninitializedLocal)
-                }
-                return Some(i.try_into().unwrap());
-            }
-        }
-        return None;
-    }
-
     pub fn define_variable(&mut self, global: Option<u8>) {
         if self.cc.scope_depth == 0 {
             self.emit_bytes(OpCode::DefineGlobal.into(), global.unwrap());
@@ -279,10 +328,18 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         self.consume(TokenType::RightParen, "Expect ')' after parameters.");
         self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
         self.block();
+        let uvs = self.cc.upvalues.clone();
         let func = self.end_cc();
         let value = Value::FunctionProto(manage(self.vm, func));
         if let Ok(constant) = self.get_current_chunk().add_constant(value) {
-            self.emit_bytes(OpCode::Closure.into(), constant)
+            self.emit_bytes(OpCode::Closure.into(), constant);
+            for uv in uvs {
+                self.emit_byte(match uv.kind {
+                    UpvalueCaptureType::EnclosingLocal => 1,
+                    UpvalueCaptureType::EnclosingUpvalue => 0,
+                });
+                self.emit_byte(uv.index.try_into().unwrap());
+            }
         } else {
             let m: &str = &format!("{}", CompileError::TooManyConstants);
             self.error(m, CompileError::TooManyConstants)
