@@ -238,11 +238,29 @@ impl Function {
 
 pub struct Closure {
     pub function: ObjectRef<Function>,
+    pub upvalues: Vec<ObjectRef<Upvalue>>,
 }
 
 impl Closure {
     pub fn new(function: ObjectRef<Function>) -> Self {
-        Self { function }
+        Self {
+            function,
+            upvalues: Vec::new(),
+        }
+    }
+}
+
+pub enum UpvalueLocation {
+    Stack(usize),
+}
+
+pub struct Upvalue {
+    pub location: UpvalueLocation,
+}
+
+impl Upvalue {
+    pub fn new(location: UpvalueLocation) -> Self {
+        Self { location }
     }
 }
 

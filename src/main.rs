@@ -7,7 +7,7 @@ use std::iter::Peekable;
 use std::slice::Iter;
 use value::{
     create_string, manage, Closure, Function, InternedString, Native, NativeFn, ObjectRoot, Trace,
-    Value,
+    Upvalue, UpvalueLocation, Value,
 };
 
 mod compiler;
@@ -528,8 +528,24 @@ impl VM {
                     OpCode::Closure => {
                         let val = ip.read_constant();
                         if let Value::FunctionProto(function) = val {
-                            let closure = manage(self, Closure::new(function));
-                            self.stack.push(Value::Function(closure));
+                            let upvalue_count = function.upgrade().unwrap().content.upvalue_count;
+                            let mut closure = Closure::new(function);
+                            for _ in 0..upvalue_count {
+                                let is_local = ip.read() != 0;
+                                let index = ip.read() as usize;
+                                let frame = &self.frames.last().unwrap();
+                                if is_local {
+                                    let uv =
+                                        // book puts the next line in a function captureUpvalue()
+                                        Upvalue::new(UpvalueLocation::Stack(frame.base + index));
+                                    closure.upvalues.push(manage(self, uv));
+                                } else {
+                                    let uv = frame.closure.content.upvalues[index].clone();
+                                    closure.upvalues.push(uv);
+                                }
+                            }
+                            let closure_val = Value::Function(manage(self, closure));
+                            self.stack.push(closure_val);
                         }
                     }
                     OpCode::Pop => {
@@ -571,8 +587,32 @@ impl VM {
                             return rt(RuntimeError::UndefinedVariable(val.try_into()?));
                         }
                     }
-                    OpCode::GetUpvalue => panic!(),
-                    OpCode::SetUpvalue => panic!(),
+                    OpCode::GetUpvalue => {
+                        let slot = ip.read() as usize;
+                        let frame = &self.frames.last().unwrap();
+                        match frame.closure.content.upvalues[slot]
+                            .upgrade()
+                            .unwrap()
+                            .content
+                            .location
+                        {
+                            UpvalueLocation::Stack(index) => {
+                                self.stack.push(self.peek_stack(index))
+                            }
+                        }
+                    }
+                    OpCode::SetUpvalue => {
+                        let slot = ip.read() as usize;
+                        let frame = &self.frames.last().unwrap();
+                        match frame.closure.content.upvalues[slot]
+                            .upgrade()
+                            .unwrap()
+                            .content
+                            .location
+                        {
+                            UpvalueLocation::Stack(index) => self.stack[index] = self.peek_stack(0),
+                        }
+                    }
                 },
                 Err(_) => return rt(RuntimeError::UnknownOpcode),
             }
