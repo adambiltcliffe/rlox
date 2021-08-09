@@ -19,16 +19,6 @@ skip = [
     "test\\benchmark",
     "test\\scanning",
     "test\\expressions",
-    # functions
-    "test\\closure",
-    "test\\for\\closure_in_body.lox",
-    "test\\for\\return_closure.lox",
-    "test\\function\\local_recursion.lox",
-    "test\\limit\\too_many_upvalues.lox",
-    "test\\regression\\40.lox",
-    "test\\while\\closure_in_body.lox",
-    "test\\while\\return_closure.lox",
-    "test\\while\\return_inside.lox",
     # classes
     "test\\assignment\\to_this.lox",
     "test\\call\\object.lox",

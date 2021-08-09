@@ -6,8 +6,8 @@ use std::io::{BufRead, Write};
 use std::iter::Peekable;
 use std::slice::Iter;
 use value::{
-    create_string, manage, Closure, Function, InternedString, Native, NativeFn, ObjectRoot, Trace,
-    Upvalue, UpvalueLocation, Value,
+    create_string, manage, Closure, Function, InternedString, Native, NativeFn, ObjectRef,
+    ObjectRoot, Trace, Upvalue, UpvalueLocation, Value,
 };
 
 mod compiler;
@@ -38,6 +38,7 @@ pub enum OpCode {
     Loop,
     Call,
     Closure,
+    CloseUpvalue,
     Pop,
     GetLocal,
     SetLocal,
@@ -309,6 +310,7 @@ pub struct VM {
     strings: HashSet<value::InternedString>,
     globals: HashMap<value::InternedString, Value>,
     frames: Vec<CallFrame>,
+    open_upvalues: Vec<ObjectRef<Upvalue>>,
 }
 
 impl VM {
@@ -319,6 +321,7 @@ impl VM {
             strings: HashSet::new(),
             globals: HashMap::new(),
             frames: Vec::new(),
+            open_upvalues: Vec::new(),
         }
     }
 
@@ -368,6 +371,47 @@ impl VM {
         match self.stack.pop() {
             Some(v) => Ok(v),
             None => Err(VMError::RuntimeError(RuntimeError::StackUnderflow)),
+        }
+    }
+
+    fn capture_upvalue(&mut self, slot: usize) -> ObjectRef<Upvalue> {
+        let mut insertion_index = self.open_upvalues.len();
+        for (i, uv) in self.open_upvalues.iter().enumerate().rev() {
+            match *uv.upgrade().unwrap().content.location.borrow() {
+                UpvalueLocation::Stack(index) => {
+                    if index == slot {
+                        return uv.clone();
+                    } else if index < slot {
+                        break;
+                    }
+                    insertion_index = i;
+                }
+                _ => unreachable!(),
+            }
+        }
+        let new_uv = manage(self, Upvalue::new(UpvalueLocation::Stack(slot)));
+        self.open_upvalues.insert(insertion_index, new_uv.clone());
+        new_uv
+    }
+
+    fn close_upvalues(&mut self, last: usize) {
+        loop {
+            match self.open_upvalues.last() {
+                None => {
+                    return;
+                }
+                Some(uv_ref) => {
+                    let uv_root = uv_ref.upgrade().unwrap();
+                    let mut loc = uv_root.content.location.borrow_mut();
+                    if let UpvalueLocation::Stack(index) = *loc {
+                        if index < last {
+                            return;
+                        }
+                        *loc = UpvalueLocation::Heap(self.stack[index].clone());
+                        self.open_upvalues.pop();
+                    }
+                }
+            }
         }
     }
 
@@ -510,6 +554,7 @@ impl VM {
                     OpCode::Return => {
                         let result = self.pop_stack()?;
                         let top = self.frames.last().unwrap().base;
+                        self.close_upvalues(top);
                         self.frames.pop();
                         match self.frames.last() {
                             None => {
@@ -533,13 +578,12 @@ impl VM {
                             for _ in 0..upvalue_count {
                                 let is_local = ip.read() != 0;
                                 let index = ip.read() as usize;
-                                let frame = &self.frames.last().unwrap();
                                 if is_local {
-                                    let uv =
-                                        // book puts the next line in a function captureUpvalue()
-                                        Upvalue::new(UpvalueLocation::Stack(frame.base + index));
-                                    closure.upvalues.push(manage(self, uv));
+                                    let frame_base = self.frames.last().unwrap().base;
+                                    let uv = self.capture_upvalue(frame_base + index);
+                                    closure.upvalues.push(uv);
                                 } else {
+                                    let frame = &self.frames.last().unwrap();
                                     let uv = frame.closure.content.upvalues[index].clone();
                                     closure.upvalues.push(uv);
                                 }
@@ -547,6 +591,10 @@ impl VM {
                             let closure_val = Value::Function(manage(self, closure));
                             self.stack.push(closure_val);
                         }
+                    }
+                    OpCode::CloseUpvalue => {
+                        self.close_upvalues(self.stack.len() - 1);
+                        self.pop_stack()?;
                     }
                     OpCode::Pop => {
                         self.pop_stack()?;
@@ -590,27 +638,29 @@ impl VM {
                     OpCode::GetUpvalue => {
                         let slot = ip.read() as usize;
                         let frame = &self.frames.last().unwrap();
-                        match frame.closure.content.upvalues[slot]
+                        match &*frame.closure.content.upvalues[slot]
                             .upgrade()
                             .unwrap()
                             .content
                             .location
+                            .borrow()
                         {
                             UpvalueLocation::Stack(index) => {
-                                self.stack.push(self.peek_stack(index))
+                                self.stack.push(self.stack[*index].clone())
                             }
+                            UpvalueLocation::Heap(value) => self.stack.push(value.clone()),
                         }
                     }
                     OpCode::SetUpvalue => {
                         let slot = ip.read() as usize;
                         let frame = &self.frames.last().unwrap();
-                        match frame.closure.content.upvalues[slot]
-                            .upgrade()
-                            .unwrap()
-                            .content
-                            .location
-                        {
+                        let uv_root = frame.closure.content.upvalues[slot].upgrade().unwrap();
+                        let mut loc = uv_root.content.location.borrow_mut();
+                        match *loc {
                             UpvalueLocation::Stack(index) => self.stack[index] = self.peek_stack(0),
+                            UpvalueLocation::Heap(_) => {
+                                *loc = UpvalueLocation::Heap(self.peek_stack(0))
+                            }
                         }
                     }
                 },

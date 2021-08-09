@@ -51,6 +51,7 @@ pub(crate) fn disassemble_instruction(ip: &mut TracingIP) {
                     }
                 };
             }
+            OpCode::CloseUpvalue => simple_instruction("CLOSE_UPVALUE"),
             OpCode::Pop => simple_instruction("POP"),
             OpCode::GetLocal => byte_instruction("GET_LOCAL", ip),
             OpCode::SetLocal => byte_instruction("SET_LOCAL", ip),

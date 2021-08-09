@@ -18,6 +18,7 @@ fn report_error(message: &str, token: &Token) {
 pub struct Local<'src> {
     name: &'src str,
     depth: Option<usize>,
+    is_captured: bool,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -58,6 +59,7 @@ impl<'src> ChunkCompiler<'src> {
         locals.push(Local {
             name: "",
             depth: Some(0),
+            is_captured: false,
         });
         Self {
             function,
@@ -91,9 +93,12 @@ impl<'src> ChunkCompiler<'src> {
                         self.add_upvalue(upvalue, UpvalueCaptureType::EnclosingUpvalue)?,
                     )),
                 },
-                Some(local) => Ok(Some(
-                    self.add_upvalue(local, UpvalueCaptureType::EnclosingLocal)?,
-                )),
+                Some(local) => {
+                    ecc.locals[local as usize].is_captured = true;
+                    Ok(Some(
+                        self.add_upvalue(local, UpvalueCaptureType::EnclosingLocal)?,
+                    ))
+                }
             },
         }
     }
@@ -104,7 +109,7 @@ impl<'src> ChunkCompiler<'src> {
                 return Ok(i.try_into().unwrap());
             }
         }
-        if self.upvalues.len() == u8::MAX as usize {
+        if self.upvalues.len() == u8::MAX as usize + 1 {
             return Err(CompileError::TooManyUpvalues);
         }
         let uv = CompilerUpvalue {
@@ -140,7 +145,11 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         while !self.cc.locals.is_empty()
             && self.cc.locals.last().unwrap().depth.unwrap() > self.cc.scope_depth
         {
-            self.emit_byte(OpCode::Pop.into());
+            if self.cc.locals.last().unwrap().is_captured {
+                self.emit_byte(OpCode::CloseUpvalue.into());
+            } else {
+                self.emit_byte(OpCode::Pop.into());
+            }
             self.cc.locals.pop();
         }
     }
@@ -256,6 +265,7 @@ impl<'src, 'vm> Compiler<'src, 'vm> {
         let local = Local {
             name: name,
             depth: None,
+            is_captured: false,
         };
         self.cc.locals.push(local);
     }

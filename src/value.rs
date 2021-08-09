@@ -1,4 +1,5 @@
 use crate::{Chunk, RuntimeError, VMError, VM};
+use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -252,15 +253,18 @@ impl Closure {
 
 pub enum UpvalueLocation {
     Stack(usize),
+    Heap(Value),
 }
 
 pub struct Upvalue {
-    pub location: UpvalueLocation,
+    pub location: RefCell<UpvalueLocation>,
 }
 
 impl Upvalue {
     pub fn new(location: UpvalueLocation) -> Self {
-        Self { location }
+        Self {
+            location: RefCell::new(location),
+        }
     }
 }
 
