@@ -93,7 +93,13 @@ impl fmt::Display for Value {
         match self {
             Self::Bool(b) => write!(f, "{}", b),
             Self::Nil => write!(f, "nil"),
-            Self::Number(n) => write!(f, "{}", n),
+            Self::Number(n) => {
+                if *n == 0.0 && n.is_sign_negative() {
+                    write!(f, "-0")
+                } else {
+                    write!(f, "{}", n)
+                }
+            }
             Self::String(obj) => write!(f, "{}", format_string(obj)),
             Self::FunctionProto(obj) => write!(f, "{}", format_function(obj)),
             Self::Function(obj) => write!(
