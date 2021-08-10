@@ -271,7 +271,7 @@ impl fmt::Display for RuntimeError {
             RuntimeError::EndOfChunk => write!(f, "Unexpected end of chunk."),
             RuntimeError::StackUnderflow => write!(f, "Stack underflow."),
             RuntimeError::StackOverflow => write!(f, "Stack overflow."),
-            RuntimeError::TypeError(t, v, plural) => {
+            RuntimeError::TypeError(t, v, _plural) => {
                 #[cfg(not(feature = "lox_errors"))]
                 {
                     return write!(f, "Expected a {} value but found: {}.", t, v);

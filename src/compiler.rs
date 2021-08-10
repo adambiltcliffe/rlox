@@ -5,7 +5,7 @@ use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 use std::convert::TryInto;
 
-#[allow(unused_imports)]
+#[cfg(feature = "lox_errors")]
 use crate::value::format_function_name;
 
 fn report_error(message: &str, token: &Token) {
