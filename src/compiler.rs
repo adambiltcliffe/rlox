@@ -1,9 +1,12 @@
 use crate::parser::{get_rule, Precedence};
 use crate::scanner::{Scanner, Token, TokenType};
-use crate::value::{create_string, format_function_name, manage, Function, FunctionType, Value};
+use crate::value::{create_string, manage, Function, FunctionType, Value};
 use crate::VM;
 use crate::{Chunk, CompileError, CompilerResult, LineNo, OpCode};
 use std::convert::TryInto;
+
+#[allow(unused_imports)]
+use crate::value::format_function_name;
 
 fn report_error(message: &str, token: &Token) {
     eprint!("[line {}] Error", token.line);
