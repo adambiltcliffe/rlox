@@ -8,8 +8,11 @@ edition = "2018"
 
 [features]
 trace = []
+trace_globals = []
 dump = []
 lox_errors = []
+verbose_gc = []
+stress_gc = []
 
 [dependencies]
 num_enum = "0.5.1"

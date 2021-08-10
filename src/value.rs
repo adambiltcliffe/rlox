@@ -1,3 +1,4 @@
+use crate::gc::Trace;
 use crate::{Chunk, RuntimeError, VMError, VM};
 use std::cell::RefCell;
 use std::convert::TryFrom;
@@ -130,10 +131,26 @@ impl PartialEq for Value {
 
 pub struct HeapEntry<T> {
     pub content: T,
+    pub marked: RefCell<bool>,
 }
 
-pub fn manage<T: 'static>(vm: &mut VM, value: T) -> ObjectRef<T> {
-    let entry = HeapEntry::<T> { content: value };
+impl<T> fmt::Display for HeapEntry<T>
+where
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.content)
+    }
+}
+
+pub fn manage<T: 'static>(vm: &mut VM, value: T) -> ObjectRef<T>
+where
+    ObjectRoot<T>: Trace,
+{
+    let entry = HeapEntry::<T> {
+        content: value,
+        marked: RefCell::new(false),
+    };
     let oroot = Rc::new(entry);
     let oref = Rc::downgrade(&oroot);
     vm.objects.push(Box::new(oroot));
@@ -146,6 +163,7 @@ pub fn create_string(vm: &mut VM, s: &str) -> ObjectRef<String> {
         None => {
             let entry = HeapEntry::<String> {
                 content: s.to_owned(),
+                marked: RefCell::new(false),
             };
             let oroot = Rc::new(entry);
             let oref = Rc::downgrade(&oroot);
@@ -247,6 +265,12 @@ impl Function {
     }
 }
 
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", format_function_name(self))
+    }
+}
+
 pub struct Closure {
     pub function: ObjectRef<Function>,
     pub upvalues: Vec<ObjectRef<Upvalue>>,
@@ -258,6 +282,13 @@ impl Closure {
             function,
             upvalues: Vec::new(),
         }
+    }
+}
+
+impl fmt::Display for Closure {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let name = format_function_name(&self.function.upgrade().unwrap().content);
+        write!(f, "<closure {}>", name)
     }
 }
 
@@ -278,6 +309,12 @@ impl Upvalue {
     }
 }
 
+impl fmt::Display for Upvalue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<upvalue>")
+    }
+}
+
 pub type NativeFn = fn(arg_count: usize, args: &[Value]) -> Value;
 
 pub struct Native {
@@ -290,6 +327,8 @@ impl Native {
     }
 }
 
-pub trait Trace {}
-
-impl<T> Trace for ObjectRoot<T> {}
+impl fmt::Display for Native {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<native fn>")
+    }
+}

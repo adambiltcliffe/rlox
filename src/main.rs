@@ -1,3 +1,5 @@
+use gc::Trace;
+use memory::get_allocated_bytes;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
@@ -7,11 +9,13 @@ use std::iter::Peekable;
 use std::slice::Iter;
 use value::{
     create_string, manage, Closure, Function, InternedString, Native, NativeFn, ObjectRef,
-    ObjectRoot, Trace, Upvalue, UpvalueLocation, Value,
+    ObjectRoot, Upvalue, UpvalueLocation, Value,
 };
 
 mod compiler;
 mod dis;
+mod gc;
+mod memory;
 mod parser;
 mod scanner;
 mod value;
@@ -315,6 +319,7 @@ pub struct VM {
     globals: HashMap<value::InternedString, Value>,
     frames: Vec<CallFrame>,
     open_upvalues: Vec<ObjectRef<Upvalue>>,
+    next_gc: usize,
 }
 
 impl VM {
@@ -326,6 +331,7 @@ impl VM {
             globals: HashMap::new(),
             frames: Vec::new(),
             open_upvalues: Vec::new(),
+            next_gc: get_allocated_bytes() * 2,
         }
     }
 
@@ -462,10 +468,12 @@ impl VM {
                     }
                 }
                 print!(
-                    " (heap: {}, strings: {})",
+                    " (heap: {}, strings: {}, bytes: {})",
                     self.objects.len(),
-                    self.strings.len()
+                    self.strings.len(),
+                    crate::memory::get_allocated_bytes()
                 );
+                #[cfg(feature = "trace_globals")]
                 for (k, v) in &self.globals {
                     print!(" {}={}", k, v);
                 }
@@ -685,6 +693,19 @@ impl VM {
                 Err(_) => return rt(RuntimeError::UnknownOpcode),
             }
             self.frames.last_mut().unwrap().ip_offset = ip.offset;
+            let current_bytes;
+            #[cfg(not(feature = "stress_gc"))]
+            {
+                current_bytes = get_allocated_bytes();
+            }
+            #[cfg(feature = "stress_gc")]
+            {
+                current_bytes = self.next_gc;
+            }
+            if current_bytes >= self.next_gc {
+                self.collect_garbage();
+                self.next_gc = get_allocated_bytes() * 2;
+            }
         }
     }
 
