@@ -81,7 +81,7 @@ def test_file(filename):
             r = expectedRuntimeErrorPattern.search(line)
             if r:
                 expected_runtime_error = r.groups(1)[0]
-                runtime_error_line = n
+                runtime_error_line = n + 1
                 expected_exit_code = 70
     result = subprocess.run(
         [binary, filename], capture_output=True, text=True, encoding="utf-8")
@@ -96,7 +96,11 @@ def test_file(filename):
             print(
                 f"{Fore.RED} Expected runtime error '{expected_runtime_error}' but got '{error_lines[0]}'.")
             ok = False
-        # update this when we have proper stack traces!
+        stack_trace_line = stackTracePattern.match(error_lines[1]).group(1)
+        if stack_trace_line != str(runtime_error_line):
+            print(
+                f"{Fore.RED} Expected runtime error on line '{runtime_error_line}' but stack trace begins on line '{stack_trace_line}'.")
+            ok = False
     else:
         exerr = "\n".join(expected_errors)
         if exerr != result.stderr.rstrip():
