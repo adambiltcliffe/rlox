@@ -56,6 +56,7 @@ impl TryFrom<Value> for bool {
             _ => Err(VMError::RuntimeError(RuntimeError::TypeError(
                 "bool",
                 v.to_string(),
+                true,
             ))),
         }
     }
@@ -69,6 +70,7 @@ impl TryFrom<Value> for f64 {
             _ => Err(VMError::RuntimeError(RuntimeError::TypeError(
                 "number",
                 v.to_string(),
+                true,
             ))),
         }
     }
@@ -84,6 +86,7 @@ impl TryFrom<Value> for String {
         Err(VMError::RuntimeError(RuntimeError::TypeError(
             "string",
             v.to_string(),
+            true,
         )))
     }
 }
@@ -208,6 +211,7 @@ impl TryFrom<Value> for InternedString {
             _ => Err(VMError::RuntimeError(RuntimeError::TypeError(
                 "string",
                 v.to_string(),
+                false,
             ))),
         }
     }

@@ -229,7 +229,7 @@ pub enum RuntimeError {
     EndOfChunk,
     StackUnderflow,
     StackOverflow,
-    TypeError(&'static str, String),
+    TypeError(&'static str, String, bool),
     InvalidAddition(String, String),
     UndefinedVariable(String),
     NotCallable,
@@ -271,14 +271,18 @@ impl fmt::Display for RuntimeError {
             RuntimeError::EndOfChunk => write!(f, "Unexpected end of chunk."),
             RuntimeError::StackUnderflow => write!(f, "Stack underflow."),
             RuntimeError::StackOverflow => write!(f, "Stack overflow."),
-            RuntimeError::TypeError(t, v) => {
+            RuntimeError::TypeError(t, v, plural) => {
                 #[cfg(not(feature = "lox_errors"))]
                 {
                     return write!(f, "Expected a {} value but found: {}.", t, v);
                 }
                 #[cfg(feature = "lox_errors")]
                 {
-                    return write!(f, "Operands must be {}s.", t);
+                    if *plural {
+                        return write!(f, "Operands must be {}s.", t);
+                    } else {
+                        return write!(f, "Operand must be a {}.", t);
+                    }
                 }
             }
             RuntimeError::InvalidAddition(v1, v2) => {
@@ -486,8 +490,22 @@ impl VM {
                     OpCode::Greater => binary_op!(>),
                     OpCode::Less => binary_op!(<),
                     OpCode::Negate => {
-                        let n: f64 = self.pop_stack()?.try_into()?;
-                        self.stack.push((-n).into());
+                        // this is a lot of effort to make one test pass
+                        #[cfg(not(feature = "lox_errors"))]
+                        {
+                            let n: f64 = self.pop_stack()?.try_into()?;
+                            self.stack.push((-n).into());
+                        }
+                        #[cfg(feature = "lox_errors")]
+                        {
+                            let n: f64 = self.pop_stack()?.try_into().map_err(|vme| match vme {
+                                VMError::RuntimeError(RuntimeError::TypeError(ex, act, true)) => {
+                                    VMError::RuntimeError(RuntimeError::TypeError(ex, act, false))
+                                }
+                                _ => vme,
+                            })?;
+                            self.stack.push((-n).into());
+                        }
                     }
                     OpCode::Add => {
                         let a = self.pop_stack()?;
